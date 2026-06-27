@@ -2440,11 +2440,20 @@ function saveAllKmlsToSheet() {
   let chain = Promise.resolve();
   allKmlData.forEach(k => {
     chain = chain.then(() => saveKmlToSheet(k.fileName, k.blocks))
-                 .then(() => new Promise(r => setTimeout(r, 300)));
+                 .then(() => new Promise(r => setTimeout(r, 500)));
   });
 
   chain.then(() => {
-    showWorkflowToast(`${allKmlData.length} mapa(s) sincronizados en la nube ✓`, '☁️', 3000);
+    return fetch(`${GOOGLE_SHEETS_URL}?action=getKmls`).then(r => r.json());
+  }).then(data => {
+    const total = allKmlData.reduce((s, k) => s + k.blocks.length, 0);
+    const saved = data.kmls ? data.kmls.reduce((s, k) => s + k.blocks.length, 0) : 0;
+    if (saved >= total) {
+      showWorkflowToast(`${allKmlData.length} mapa(s) sincronizados en la nube ✓`, '☁️', 3000);
+    } else {
+      showWorkflowToast(`Guardado parcial (${saved}/${total} poligonos). Reintenta.`, '⚠️', 5000);
+      console.warn(`[MapView] Verificacion: esperaba ${total} poligonos, Sheets tiene ${saved}`);
+    }
   }).catch(() => {
     showWorkflowToast('Error al sincronizar. Reintenta.', '❌', 5000);
   });
@@ -3095,7 +3104,7 @@ function resetDetail() {
 // ── GOOGLE SHEETS INTEGRATION ──
 // Reemplaza esta URL con la de tu Google Apps Script desplegado como Web App.
 // Ver instrucciones más abajo en los comentarios del código.
-const GOOGLE_SHEETS_URL = 'https://script.google.com/macros/s/AKfycbzZOZFBSCZfuxgsIwYoCAWXApIMpt-0gCE60wZ30Vx70yzvoC0W4h6J4SXp8KRgAHkR/exec';
+const GOOGLE_SHEETS_URL = 'https://script.google.com/macros/s/AKfycbwz_ZrhpdGjpqeIASRf7lrLwetgO7AgDKJFtvLwkgHtfbpBJdw16pMSadY-5peLZ601/exec';
 
 function saveToSheet() {
   if (!selectedBlockKey) return;
