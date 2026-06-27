@@ -2388,7 +2388,10 @@ function deleteKmlData(fileName) {
 function fetchKmlsFromSheet() {
   console.log('[MapView] Cargando KMLs desde Google Sheets...');
   return fetch(`${GOOGLE_SHEETS_URL}?action=getKmls`)
-    .then(r => r.json())
+    .then(r => {
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return r.json();
+    })
     .then(data => {
       if (data.kmls && data.kmls.length > 0) {
         const cleaned = {};
@@ -2396,26 +2399,26 @@ function fetchKmlsFromSheet() {
           if (!k.fileName || k.fileName === 'fileName' || !k.blocks || k.blocks.length === 0) return;
           if (k.blocks.length === 1 && k.blocks[0].name === 'blockName') return;
           if (!cleaned[k.fileName]) {
-            cleaned[k.fileName] = k;
-          } else {
-            const seen = new Set(cleaned[k.fileName].blocks.map(b => b.name));
-            k.blocks.forEach(b => {
-              if (!seen.has(b.name)) {
-                cleaned[k.fileName].blocks.push(b);
-                seen.add(b.name);
-              }
-            });
+            cleaned[k.fileName] = { fileName: k.fileName, blocks: [] };
           }
+          const seen = new Set(cleaned[k.fileName].blocks.map(b => b.name));
+          k.blocks.forEach(b => {
+            if (b.name && b.coords && !seen.has(b.name)) {
+              cleaned[k.fileName].blocks.push(b);
+              seen.add(b.name);
+            }
+          });
         });
-        const sheetsKmls = Object.values(cleaned);
+        const sheetsKmls = Object.values(cleaned).filter(k => k.blocks.length > 0);
         if (sheetsKmls.length > 0) {
           allKmlData = sheetsKmls;
           saveKmlToStorage();
-          console.log(`[MapView] KMLs desde Sheets: ${allKmlData.length} mapas, ${allKmlData.reduce((s, k) => s + k.blocks.length, 0)} poligonos`);
+          const total = allKmlData.reduce((s, k) => s + k.blocks.length, 0);
+          console.log(`[MapView] KMLs desde Sheets: ${allKmlData.length} mapas, ${total} poligonos`);
           return true;
         }
       }
-      console.log('[MapView] Sheets vacio, usando datos locales');
+      console.log('[MapView] Sheets sin KMLs, usando datos locales');
       return false;
     })
     .catch(err => {
@@ -2425,41 +2428,43 @@ function fetchKmlsFromSheet() {
 }
 
 function saveKmlToSheet(fileName, blocks) {
+  const payload = JSON.stringify({ action: 'saveKml', fileName: fileName, blocks: blocks });
   return fetch(GOOGLE_SHEETS_URL, {
     method: 'POST',
-    mode: 'no-cors',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ action: 'saveKml', fileName: fileName, blocks: blocks })
-  }).then(() => {
-    console.log(`[MapView] KML guardado: ${fileName} (${blocks.length} bloques)`);
+    headers: { 'Content-Type': 'text/plain' },
+    body: payload
+  }).then(r => r.json()).then(data => {
+    console.log(`[MapView] KML guardado: ${fileName} (${blocks.length} bloques)`, data);
+    return data;
   }).catch(err => {
-    console.warn('[MapView] Error guardando KML:', fileName, err);
+    console.warn(`[MapView] Error guardando KML: ${fileName}`, err);
+    return null;
   });
 }
 
 function saveAllKmlsToSheet() {
   if (!isAdmin || allKmlData.length === 0) return;
-  showWorkflowToast('Sincronizando mapas con la nube...', '☁️', 5000);
+  showWorkflowToast('Sincronizando mapas con la nube...', '☁️', 10000);
 
   let chain = Promise.resolve();
+  let saved = 0;
+  let failed = 0;
+
   allKmlData.forEach(k => {
-    chain = chain.then(() => saveKmlToSheet(k.fileName, k.blocks))
-                 .then(() => new Promise(r => setTimeout(r, 500)));
+    chain = chain.then(() => {
+      return saveKmlToSheet(k.fileName, k.blocks)
+        .then(() => { saved++; })
+        .catch(() => { failed++; })
+        .then(() => new Promise(r => setTimeout(r, 500)));
+    });
   });
 
   chain.then(() => {
-    return fetch(`${GOOGLE_SHEETS_URL}?action=getKmls`).then(r => r.json());
-  }).then(data => {
-    const total = allKmlData.reduce((s, k) => s + k.blocks.length, 0);
-    const saved = data.kmls ? data.kmls.reduce((s, k) => s + k.blocks.length, 0) : 0;
-    if (saved >= total) {
-      showWorkflowToast(`${allKmlData.length} mapa(s) sincronizados en la nube ✓`, '☁️', 3000);
+    if (failed === 0) {
+      showWorkflowToast(`${saved} mapa(s) sincronizados en la nube ✓`, '☁️', 3000);
     } else {
-      showWorkflowToast(`Guardado parcial (${saved}/${total} poligonos). Reintenta.`, '⚠️', 5000);
-      console.warn(`[MapView] Verificacion: esperaba ${total} poligonos, Sheets tiene ${saved}`);
+      showWorkflowToast(`${saved} OK, ${failed} fallaron. Reintenta subir.`, '⚠️', 5000);
     }
-  }).catch(() => {
-    showWorkflowToast('Error al sincronizar. Reintenta.', '❌', 5000);
   });
 }
 
