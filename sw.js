@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mapview-v3';
+const CACHE_NAME = 'mapview-v4';
 const ASSETS = [
   '/',
   '/index.html',

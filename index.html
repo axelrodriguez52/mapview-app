@@ -1940,6 +1940,7 @@
           <path d="M2 4h12M2 8h12M2 12h12"/>
         </svg>
         Cambiar mapa
+        <span id="pending-badge" style="display:none;background:#f59e0b;color:#000;border-radius:50%;width:18px;height:18px;font-size:0.65rem;font-weight:700;align-items:center;justify-content:center;margin-left:4px;"></span>
     </button>
 
     <div class="header-stats">
@@ -2286,6 +2287,7 @@ if (localStorage.getItem('mapview-admin') === '1') {
 // ── KML PERSISTENCE (localStorage) ──
 const KML_STORAGE_KEY = 'mapview-kml-data';
 const KML_STORAGE_MAP_KEY = 'mapview-selected-map';
+const PENDING_RECORDS_KEY = 'mapview-pending-records';
 
 let sheetRecords = [];
 let recordsMap = {};
@@ -3116,6 +3118,63 @@ function resetDetail() {
 // Ver instrucciones más abajo en los comentarios del código.
 const GOOGLE_SHEETS_URL = 'https://script.google.com/macros/s/AKfycbzV9yAlCGX_BrTi3APtHqFmye3smVNz00btXrm9Sqtym1yhqOm524PP4RNbNKv2lmwl/exec';
 
+function getPendingRecords() {
+  try {
+    return JSON.parse(localStorage.getItem(PENDING_RECORDS_KEY)) || [];
+  } catch (e) { return []; }
+}
+
+function savePendingRecords(records) {
+  try { localStorage.setItem(PENDING_RECORDS_KEY, JSON.stringify(records)); } catch (e) {}
+}
+
+function queueRecord(payload) {
+  const pending = getPendingRecords();
+  pending.push(payload);
+  savePendingRecords(pending);
+}
+
+function syncPendingRecords() {
+  const pending = getPendingRecords();
+  if (pending.length === 0) return;
+
+  let synced = 0;
+  let failed = 0;
+  const remaining = [];
+
+  function trySync(i) {
+    if (i >= pending.length) {
+      savePendingRecords(remaining);
+      if (synced > 0) {
+        showWorkflowToast(`${synced} registro(s) offline sincronizados ✓`, '🔄', 4000);
+        fetchRecords();
+      }
+      if (failed > 0) {
+        showWorkflowToast(`${failed} registro(s) pendientes (sin conexión)`, '⚠️', 4000);
+      }
+      updatePendingBadge();
+      return;
+    }
+    const rec = pending[i];
+    const p = JSON.stringify(rec);
+    fetch(`${GOOGLE_SHEETS_URL}?action=addRecord&d=${encodeURIComponent(p)}`)
+      .then(r => r.json())
+      .then(d => { if (d.status === 'ok') synced++; else { remaining.push(rec); failed++; } })
+      .catch(() => { remaining.push(rec); failed++; })
+      .finally(() => setTimeout(() => trySync(i + 1), 300));
+  }
+  trySync(0);
+}
+
+function updatePendingBadge() {
+  const count = getPendingRecords().length;
+  const badge = document.getElementById('pending-badge');
+  if (badge) {
+    badge.textContent = count > 0 ? count : '';
+    badge.style.display = count > 0 ? 'flex' : 'none';
+  }
+}
+
 function saveToSheet() {
   if (!selectedBlockKey) return;
 
@@ -3140,16 +3199,33 @@ function saveToSheet() {
   statusEl.className = 'save-status';
   statusEl.textContent = '';
 
-  const payload = JSON.stringify({
+  const payload = {
     action: 'addRecord',
     publicador: publisher,
     territorio: block.name,
     mapName: mapData.name,
     fechaInicio: dateStart || '',
     fechaFin: dateEnd || ''
-  });
+  };
 
-  fetch(`${GOOGLE_SHEETS_URL}?action=addRecord&d=${encodeURIComponent(payload)}`)
+  const p = JSON.stringify(payload);
+
+  if (!navigator.onLine) {
+    queueRecord(payload);
+    statusEl.className = 'save-status success';
+    statusEl.textContent = 'Guardado offline. Se sincronizará al conectar.';
+    btn.disabled = false;
+    btn.innerHTML = `
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M13 2H3a1 1 0 00-1 1v10a1 1 0 001 1h10a1 1 0 001-1V3a1 1 0 00-1-1z"/>
+        <path d="M5 8l2 2 4-4"/>
+      </svg>
+      Grabar en Sheets`;
+    updatePendingBadge();
+    return;
+  }
+
+  fetch(`${GOOGLE_SHEETS_URL}?action=addRecord&d=${encodeURIComponent(p)}`)
     .then(r => r.json())
     .then(data => {
       if (data.status === 'ok') {
@@ -3161,8 +3237,10 @@ function saveToSheet() {
       }
     })
     .catch(() => {
-      statusEl.className = 'save-status error';
-      statusEl.textContent = 'No se pudo guardar. Intenta de nuevo.';
+      queueRecord(payload);
+      statusEl.className = 'save-status success';
+      statusEl.textContent = 'Guardado offline. Se sincronizará al conectar.';
+      updatePendingBadge();
     })
     .finally(() => {
       btn.disabled = false;
@@ -3764,6 +3842,14 @@ fetchKmlsFromSheet().then(ok => {
     }
   });
 });
+
+window.addEventListener('online', () => {
+  showWorkflowToast('Conectado. Sincronizando registros offline...', '🔄', 3000);
+  syncPendingRecords();
+  fetchKmlsFromSheet().then(ok => { if (ok) saveKmlToStorage(); });
+});
+
+updatePendingBadge();
 </script>
 <script>
 if ('serviceWorker' in navigator) {
