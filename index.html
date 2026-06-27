@@ -3591,13 +3591,7 @@ anime({
 
         fetchKmlsFromSheet().then(ok => {
           if (ok) {
-            const savedMapName = localStorage.getItem(KML_STORAGE_MAP_KEY);
-            let selectedIndex = 0;
-            if (savedMapName) {
-              const idx = allKmlData.findIndex(k => k.fileName.replace(/\.(kml|xml)$/i, '') === savedMapName);
-              if (idx !== -1) selectedIndex = idx;
-            }
-            loadSelectedMap(selectedIndex);
+            openMapSelector();
           } else if (!autoLoadSavedKmls()) {
             updateStats();
           }
