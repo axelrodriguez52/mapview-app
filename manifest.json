@@ -2,7 +2,7 @@
   "name": "MapView - Territorios",
   "short_name": "MapView",
   "description": "Visualiza y registra territorios en mapa",
-  "start_url": "/index.html",
+  "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#0f1729",
   "theme_color": "#0f1729",
