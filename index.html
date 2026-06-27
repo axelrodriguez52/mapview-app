@@ -3096,6 +3096,7 @@ function saveToSheet() {
   const payload = {
     publicador: publisher,
     territorio: block.name,
+    mapName: mapData.name,
     fecha_inicio: dateStart || '',
     fecha_fin: dateEnd || ''
   };
@@ -3165,6 +3166,15 @@ function saveToSheet() {
  *          kmlSheet.appendRow([data.fileName, block.name, block.coords]);
  *        });
  *
+ *        var regSheet = ss.getSheetByName('Registros');
+ *        if (regSheet) {
+ *          var headers = regSheet.getRange(1, 1, 1, regSheet.getLastColumn()).getValues()[0];
+ *          var colIdx = headers.indexOf(data.fileName);
+ *          if (colIdx === -1) {
+ *            regSheet.getRange(1, headers.length + 1).setValue(data.fileName);
+ *          }
+ *        }
+ *
  *        return ContentService
  *          .createTextOutput(JSON.stringify({ status: 'ok' }))
  *          .setMimeType(ContentService.MimeType.JSON);
@@ -3184,13 +3194,35 @@ function saveToSheet() {
  *          .setMimeType(ContentService.MimeType.JSON);
  *      }
  *
- *      var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
- *      sheet.appendRow([
- *        data.publicador,
- *        data.territorio,
- *        data.fecha_inicio,
- *        data.fecha_fin
- *      ]);
+ *      var ss = SpreadsheetApp.getActiveSpreadsheet();
+ *      var sheet = ss.getSheetByName('Registros');
+ *      if (!sheet) {
+ *        sheet = ss.insertSheet('Registros');
+ *        sheet.appendRow(['Publicador', 'Fecha Inicio', 'Fecha Fin']);
+ *      }
+ *
+ *      if (sheet.getLastColumn() < 3) {
+ *        sheet.getRange(1, 1, 1, 3).setValues([['Publicador', 'Fecha Inicio', 'Fecha Fin']]);
+ *      }
+ *
+ *      var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+ *      var mapColIdx = -1;
+ *      for (var i = 0; i < headers.length; i++) {
+ *        if (headers[i].toString() === data.mapName) { mapColIdx = i + 1; break; }
+ *      }
+ *      if (mapColIdx === -1) {
+ *        mapColIdx = headers.length + 1;
+ *        sheet.getRange(1, mapColIdx).setValue(data.mapName);
+ *      }
+ *
+ *      var newRow = new Array(sheet.getLastColumn()).fill('');
+ *      newRow[0] = data.publicador;
+ *      newRow[1] = data.fecha_inicio;
+ *      newRow[2] = data.fecha_fin;
+ *      newRow[mapColIdx - 1] = data.territorio;
+ *
+ *      var lastRow = sheet.getLastRow();
+ *      sheet.getRange(lastRow + 1, 1, 1, newRow.length).setValues([newRow]);
  *
  *      return ContentService
  *        .createTextOutput(JSON.stringify({ status: 'ok' }))
@@ -3216,17 +3248,27 @@ function saveToSheet() {
  *      }
  *
  *      if (action === 'getRecords') {
- *        var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
- *        var data = sheet.getDataRange().getValues();
+ *        var ss = SpreadsheetApp.getActiveSpreadsheet();
+ *        var sheet = ss.getSheetByName('Registros');
  *        var records = [];
  *
- *        for (var i = 1; i < data.length; i++) {
- *          records.push({
- *            publicador: data[i][0] ? data[i][0].toString() : '',
- *            territorio: data[i][1] ? data[i][1].toString() : '',
- *            fecha_inicio: data[i][2] ? data[i][2].toString() : '',
- *            fecha_fin: data[i][3] ? data[i][3].toString() : ''
- *          });
+ *        if (sheet && sheet.getLastRow() > 1) {
+ *          var data = sheet.getDataRange().getValues();
+ *          var headers = data[0];
+ *
+ *          for (var i = 1; i < data.length; i++) {
+ *            for (var j = 3; j < headers.length; j++) {
+ *              if (data[i][j] && data[i][j].toString().trim() !== '') {
+ *                records.push({
+ *                  publicador: data[i][0] ? data[i][0].toString() : '',
+ *                  territorio: data[i][j].toString(),
+ *                  mapName: headers[j].toString(),
+ *                  fecha_inicio: data[i][1] ? data[i][1].toString() : '',
+ *                  fecha_fin: data[i][2] ? data[i][2].toString() : ''
+ *                });
+ *              }
+ *            }
+ *          }
  *        }
  *
  *        return ContentService
@@ -3264,26 +3306,20 @@ function saveToSheet() {
  *        .setMimeType(ContentService.MimeType.JSON);
  *    }
  *
- * 4. Crea una hoja llamada "Config" con la contraseña en la celda A1:
- *    - Hoja: "Config"
- *    - Celda A1: tu contraseña (ej: "mipassword123")
- *    - Si no creas la hoja, se usa "admin123" por defecto.
+ * 4. Crea una hoja llamada "Config" con la contraseña en la celda A1.
  *
- * 5. En la hoja principal, agrega estos encabezados en la fila 1:
- *    Publicador | Territorio | Fecha Inicio | Fecha Fin
+ * 5. La hoja "Registros" se crea automáticamente con columnas:
+ *    Publicador | Fecha Inicio | Fecha Fin | MapName1 | MapName2 | ...
+ *    Cada mapa cargado crea su propia columna.
  *
  * 6. La hoja "KMLs" se crea automáticamente al subir el primer KML.
  *    - Columnas: fileName | blockName | coords
- *    - Cada fila es un polígono de un archivo KML.
  *
  * 7. Ve a Implementar > Nueva implementación.
  *    - Tipo: Aplicación web
  *    - Ejecutar como: Yo (tu cuenta)
  *    - Quién tiene acceso: Cualquier persona
  *    - Haz clic en "Implementar" y copia la URL generada.
- *
- * 8. Reemplaza la constante GOOGLE_SHEETS_URL en este archivo
- *    con la URL copiada del paso 7.
  *
  * ══════════════════════════════════════════════════════════════
  */
