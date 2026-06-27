@@ -2407,11 +2407,15 @@ function fetchKmlsFromSheet() {
             });
           }
         });
-        allKmlData = Object.values(cleaned);
-        saveKmlToStorage();
-        console.log(`[MapView] KMLs cargados: ${allKmlData.length} mapas, ${allKmlData.reduce((s, k) => s + k.blocks.length, 0)} poligonos`);
-        return true;
+        const sheetsKmls = Object.values(cleaned);
+        if (sheetsKmls.length > 0) {
+          allKmlData = sheetsKmls;
+          saveKmlToStorage();
+          console.log(`[MapView] KMLs desde Sheets: ${allKmlData.length} mapas, ${allKmlData.reduce((s, k) => s + k.blocks.length, 0)} poligonos`);
+          return true;
+        }
       }
+      console.log('[MapView] Sheets vacio, usando datos locales');
       return false;
     })
     .catch(err => {
@@ -3630,6 +3634,7 @@ function showWorkflowToast(text, icon, duration) {
 // ── INTRO ──
 fetchAdminPassword();
 fetchRecords();
+loadKmlFromStorage();
 
 function showApp() {
   $intro.style.display = 'none';
@@ -3643,7 +3648,9 @@ function showApp() {
   }
 }
 
-fetchKmlsFromSheet().then(() => {
+fetchKmlsFromSheet().then(ok => {
+  if (ok) saveKmlToStorage();
+}).finally(() => {
   anime({
     targets: '#bar-fill',
     width: ['0%', '100%'],
