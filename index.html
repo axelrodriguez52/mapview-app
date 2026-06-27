@@ -2394,7 +2394,13 @@ function fetchKmlsFromSheet() {
     .then(data => {
       console.log('[MapView] Respuesta getKmls:', data);
       if (data.kmls && data.kmls.length > 0) {
-        allKmlData = data.kmls;
+        allKmlData = data.kmls.filter(k =>
+          k.fileName &&
+          k.fileName !== 'fileName' &&
+          k.blocks &&
+          k.blocks.length > 0 &&
+          !(k.blocks.length === 1 && k.blocks[0].name === 'blockName')
+        );
         saveKmlToStorage();
         console.log(`[MapView] KMLs cargados desde Google Sheets: ${allKmlData.length}`);
         return true;
@@ -3570,34 +3576,19 @@ function showWorkflowToast(text, icon, duration) {
   }, duration || 4000);
 }
 
-// ── INTRO ──
-anime({
-  targets: '#bar-fill',
-  width: ['0%', '100%'],
-  duration: 1200,
-  easing: 'easeInOutQuad',
-  complete: () => {
-    anime({
-      targets: '#intro',
-      opacity: [1, 0],
-      duration: 400,
-      complete: () => {
-        $intro.style.display = 'none';
-        anime({ targets: '#app', opacity: [0, 1], duration: 300, easing: 'easeOutCubic' });
-        map.invalidateSize();
+// ── STARTUP ──
+$intro.style.display = 'none';
+document.getElementById('app').style.opacity = '1';
+map.invalidateSize();
 
-        fetchAdminPassword();
-        fetchRecords();
+fetchAdminPassword();
+fetchRecords();
 
-        fetchKmlsFromSheet().then(ok => {
-          if (ok) {
-            openMapSelector();
-          } else if (!autoLoadSavedKmls()) {
-            updateStats();
-          }
-        });
-      }
-    });
+fetchKmlsFromSheet().then(ok => {
+  if (ok) {
+    openMapSelector();
+  } else if (!autoLoadSavedKmls()) {
+    updateStats();
   }
 });
 </script>
