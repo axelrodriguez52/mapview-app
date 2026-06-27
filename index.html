@@ -3576,19 +3576,33 @@ function showWorkflowToast(text, icon, duration) {
   }, duration || 4000);
 }
 
-// ── STARTUP ──
-$intro.style.display = 'none';
-document.getElementById('app').style.opacity = '1';
-map.invalidateSize();
-
+// ── INTRO ──
 fetchAdminPassword();
 fetchRecords();
+fetchKmlsFromSheet();
 
-fetchKmlsFromSheet().then(ok => {
-  if (ok) {
-    openMapSelector();
-  } else if (!autoLoadSavedKmls()) {
-    updateStats();
+anime({
+  targets: '#bar-fill',
+  width: ['0%', '100%'],
+  duration: 1200,
+  easing: 'easeInOutQuad',
+  complete: () => {
+    anime({
+      targets: '#intro',
+      opacity: [1, 0],
+      duration: 400,
+      complete: () => {
+        $intro.style.display = 'none';
+        anime({ targets: '#app', opacity: [0, 1], duration: 300, easing: 'easeOutCubic' });
+        map.invalidateSize();
+
+        if (allKmlData.length > 0) {
+          openMapSelector();
+        } else {
+          updateStats();
+        }
+      }
+    });
   }
 });
 </script>
