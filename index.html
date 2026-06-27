@@ -2384,16 +2384,22 @@ function deleteKmlData(fileName) {
 }
 
 // ── KML SHARED STORAGE (Google Sheets) ──
+let kmlsSavedToSheet = 0;
+let kmlsFailedToSave = 0;
+
 function fetchKmlsFromSheet() {
+  console.log('[MapView] Intentando cargar KMLs desde Google Sheets...');
   return fetch(`${GOOGLE_SHEETS_URL}?action=getKmls`)
     .then(r => r.json())
     .then(data => {
+      console.log('[MapView] Respuesta getKmls:', data);
       if (data.kmls && data.kmls.length > 0) {
         allKmlData = data.kmls;
         saveKmlToStorage();
         console.log(`[MapView] KMLs cargados desde Google Sheets: ${allKmlData.length}`);
         return true;
       }
+      console.log('[MapView] No hay KMLs en Google Sheets');
       return false;
     })
     .catch(err => {
@@ -2403,16 +2409,40 @@ function fetchKmlsFromSheet() {
 }
 
 function saveKmlToSheet(fileName, blocks) {
-  fetch(GOOGLE_SHEETS_URL, {
+  console.log(`[MapView] Guardando KML en Sheets: ${fileName} (${blocks.length} bloques)`);
+  return fetch(GOOGLE_SHEETS_URL, {
     method: 'POST',
     mode: 'no-cors',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ action: 'saveKml', fileName: fileName, blocks: blocks })
-  }).catch(err => console.warn('[MapView] Error guardando KML en Sheets:', err));
+  }).then(() => {
+    kmlsSavedToSheet++;
+    console.log(`[MapView] KML guardado OK en Sheets: ${fileName}`);
+  }).catch(err => {
+    kmlsFailedToSave++;
+    console.warn('[MapView] Error guardando KML en Sheets:', fileName, err);
+  });
+}
+
+function saveAllKmlsToSheet() {
+  if (!isAdmin || allKmlData.length === 0) return;
+  kmlsSavedToSheet = 0;
+  kmlsFailedToSave = 0;
+  showWorkflowToast('Sincronizando mapas con la nube...', '☁️', 3000);
+
+  const promises = allKmlData.map(k => saveKmlToSheet(k.fileName, k.blocks));
+  Promise.all(promises).then(() => {
+    if (kmlsFailedToSave > 0) {
+      showWorkflowToast(`⚠️ ${kmlsFailedToSave} mapa(s) no se pudieron sincronizar. Reintenta subir.`, '❌', 5000);
+    } else {
+      showWorkflowToast(`${kmlsSavedToSheet} mapa(s) sincronizados en la nube ✓`, '☁️', 3000);
+    }
+  });
 }
 
 function deleteKmlFromSheet(fileName) {
-  fetch(GOOGLE_SHEETS_URL, {
+  console.log(`[MapView] Eliminando KML de Sheets: ${fileName}`);
+  return fetch(GOOGLE_SHEETS_URL, {
     method: 'POST',
     mode: 'no-cors',
     headers: { 'Content-Type': 'application/json' },
@@ -3281,7 +3311,7 @@ $fileUploadEmpty.addEventListener('change', (e) => {
       loadedCount++;
       if (loadedCount === files.length) {
         saveKmlToStorage();
-        if (isAdmin) allKmlData.forEach(k => saveKmlToSheet(k.fileName, k.blocks));
+        if (isAdmin) saveAllKmlsToSheet();
         openMapSelector();
       }
     };
@@ -3362,7 +3392,7 @@ $fileUpload.addEventListener('change', (e) => {
       loadedCount++;
       if (loadedCount === files.length) {
         saveKmlToStorage();
-        if (isAdmin) allKmlData.forEach(k => saveKmlToSheet(k.fileName, k.blocks));
+        if (isAdmin) saveAllKmlsToSheet();
         openMapSelector();
       }
     };
