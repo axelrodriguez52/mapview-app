@@ -2313,7 +2313,8 @@ function fetchRecords() {
 function buildRecordsMap() {
   recordsMap = {};
   sheetRecords.forEach(r => {
-    const key = r.territorio.toLowerCase().trim();
+    const key = r.territorio ? r.territorio.toLowerCase().trim() : '';
+    if (!key) return;
     if (!recordsMap[key]) {
       recordsMap[key] = r;
     } else {
