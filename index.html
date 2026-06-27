@@ -2377,6 +2377,43 @@ function deleteKmlData(fileName) {
   saveKmlToStorage();
 }
 
+// ── KML SHARED STORAGE (Google Sheets) ──
+function fetchKmlsFromSheet() {
+  return fetch(`${GOOGLE_SHEETS_URL}?action=getKmls`)
+    .then(r => r.json())
+    .then(data => {
+      if (data.kmls && data.kmls.length > 0) {
+        allKmlData = data.kmls;
+        saveKmlToStorage();
+        console.log(`[MapView] KMLs cargados desde Google Sheets: ${allKmlData.length}`);
+        return true;
+      }
+      return false;
+    })
+    .catch(err => {
+      console.warn('[MapView] Error al cargar KMLs de Google Sheets:', err);
+      return false;
+    });
+}
+
+function saveKmlToSheet(fileName, blocks) {
+  fetch(GOOGLE_SHEETS_URL, {
+    method: 'POST',
+    mode: 'no-cors',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'saveKml', fileName: fileName, blocks: blocks })
+  }).catch(err => console.warn('[MapView] Error guardando KML en Sheets:', err));
+}
+
+function deleteKmlFromSheet(fileName) {
+  fetch(GOOGLE_SHEETS_URL, {
+    method: 'POST',
+    mode: 'no-cors',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'deleteKml', fileName: fileName })
+  }).catch(err => console.warn('[MapView] Error eliminando KML de Sheets:', err));
+}
+
 // ── DEBOUNCE UTILITY ──
 function debounce(fn, ms) {
   let timer;
@@ -2762,6 +2799,7 @@ function renderMapList() {
     deleteBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       if (confirm(`¿Eliminar el mapa "${m.name}" y todos sus bloques?`)) {
+        deleteKmlFromSheet(m.name);
         deleteKmlData(m.name);
         removeMap(m.id);
         saveKmlToStorage();
@@ -3069,9 +3107,48 @@ function saveToSheet() {
  * 3. Borra el contenido por defecto y pega este código:
  *
  *    function doPost(e) {
- *      var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
  *      var data = JSON.parse(e.postData.contents);
  *
+ *      if (data.action === 'saveKml') {
+ *        var ss = SpreadsheetApp.getActiveSpreadsheet();
+ *        var kmlSheet = ss.getSheetByName('KMLs');
+ *        if (!kmlSheet) kmlSheet = ss.insertSheet('KMLs');
+ *
+ *        if (kmlSheet.getLastRow() === 0) {
+ *          kmlSheet.appendRow(['fileName', 'blockName', 'coords']);
+ *        }
+ *
+ *        var allData = kmlSheet.getDataRange().getValues();
+ *        var rowsToDelete = [];
+ *        for (var i = allData.length - 1; i >= 1; i--) {
+ *          if (allData[i][0] === data.fileName) rowsToDelete.push(i + 1);
+ *        }
+ *        rowsToDelete.forEach(function(r) { kmlSheet.deleteRow(r); });
+ *
+ *        data.blocks.forEach(function(block) {
+ *          kmlSheet.appendRow([data.fileName, block.name, block.coords]);
+ *        });
+ *
+ *        return ContentService
+ *          .createTextOutput(JSON.stringify({ status: 'ok' }))
+ *          .setMimeType(ContentService.MimeType.JSON);
+ *      }
+ *
+ *      if (data.action === 'deleteKml') {
+ *        var ss = SpreadsheetApp.getActiveSpreadsheet();
+ *        var kmlSheet = ss.getSheetByName('KMLs');
+ *        if (kmlSheet && kmlSheet.getLastRow() > 0) {
+ *          var allData = kmlSheet.getDataRange().getValues();
+ *          for (var i = allData.length - 1; i >= 1; i--) {
+ *            if (allData[i][0] === data.fileName) kmlSheet.deleteRow(i + 1);
+ *          }
+ *        }
+ *        return ContentService
+ *          .createTextOutput(JSON.stringify({ status: 'ok' }))
+ *          .setMimeType(ContentService.MimeType.JSON);
+ *      }
+ *
+ *      var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
  *      sheet.appendRow([
  *        data.publicador,
  *        data.territorio,
@@ -3121,6 +3198,31 @@ function saveToSheet() {
  *          .setMimeType(ContentService.MimeType.JSON);
  *      }
  *
+ *      if (action === 'getKmls') {
+ *        var ss = SpreadsheetApp.getActiveSpreadsheet();
+ *        var kmlSheet = ss.getSheetByName('KMLs');
+ *        var kmls = [];
+ *
+ *        if (kmlSheet && kmlSheet.getLastRow() > 1) {
+ *          var data = kmlSheet.getDataRange().getValues();
+ *          var kmlMap = {};
+ *          for (var i = 1; i < data.length; i++) {
+ *            var fn = data[i][0] ? data[i][0].toString() : '';
+ *            var bn = data[i][1] ? data[i][1].toString() : '';
+ *            var co = data[i][2] ? data[i][2].toString() : '';
+ *            if (!kmlMap[fn]) kmlMap[fn] = [];
+ *            kmlMap[fn].push({ name: bn, coords: co });
+ *          }
+ *          kmls = Object.keys(kmlMap).map(function(fn) {
+ *            return { fileName: fn, blocks: kmlMap[fn] };
+ *          });
+ *        }
+ *
+ *        return ContentService
+ *          .createTextOutput(JSON.stringify({ kmls: kmls }))
+ *          .setMimeType(ContentService.MimeType.JSON);
+ *      }
+ *
  *      return ContentService
  *        .createTextOutput(JSON.stringify({ error: 'unknown action' }))
  *        .setMimeType(ContentService.MimeType.JSON);
@@ -3134,14 +3236,18 @@ function saveToSheet() {
  * 5. En la hoja principal, agrega estos encabezados en la fila 1:
  *    Publicador | Territorio | Fecha Inicio | Fecha Fin
  *
- * 6. Ve a Implementar > Nueva implementación.
+ * 6. La hoja "KMLs" se crea automáticamente al subir el primer KML.
+ *    - Columnas: fileName | blockName | coords
+ *    - Cada fila es un polígono de un archivo KML.
+ *
+ * 7. Ve a Implementar > Nueva implementación.
  *    - Tipo: Aplicación web
  *    - Ejecutar como: Yo (tu cuenta)
  *    - Quién tiene acceso: Cualquier persona
  *    - Haz clic en "Implementar" y copia la URL generada.
  *
- * 7. Reemplaza la constante GOOGLE_SHEETS_URL en este archivo
- *    con la URL copiada del paso 6.
+ * 8. Reemplaza la constante GOOGLE_SHEETS_URL en este archivo
+ *    con la URL copiada del paso 7.
  *
  * ══════════════════════════════════════════════════════════════
  */
@@ -3169,6 +3275,7 @@ $fileUploadEmpty.addEventListener('change', (e) => {
       loadedCount++;
       if (loadedCount === files.length) {
         saveKmlToStorage();
+        if (isAdmin) allKmlData.forEach(k => saveKmlToSheet(k.fileName, k.blocks));
         openMapSelector();
       }
     };
@@ -3249,6 +3356,7 @@ $fileUpload.addEventListener('change', (e) => {
       loadedCount++;
       if (loadedCount === files.length) {
         saveKmlToStorage();
+        if (isAdmin) allKmlData.forEach(k => saveKmlToSheet(k.fileName, k.blocks));
         openMapSelector();
       }
     };
@@ -3409,9 +3517,19 @@ anime({
         fetchAdminPassword();
         fetchRecords();
 
-        if (!autoLoadSavedKmls()) {
-          updateStats();
-        }
+        fetchKmlsFromSheet().then(ok => {
+          if (ok) {
+            const savedMapName = localStorage.getItem(KML_STORAGE_MAP_KEY);
+            let selectedIndex = 0;
+            if (savedMapName) {
+              const idx = allKmlData.findIndex(k => k.fileName.replace(/\.(kml|xml)$/i, '') === savedMapName);
+              if (idx !== -1) selectedIndex = idx;
+            }
+            loadSelectedMap(selectedIndex);
+          } else if (!autoLoadSavedKmls()) {
+            updateStats();
+          }
+        });
       }
     });
   }
