@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mapview-v1';
+const CACHE_NAME = 'mapview-v3';
 const ASSETS = [
   '/',
   '/index.html',
@@ -24,7 +24,6 @@ self.addEventListener('activate', e => {
 });
 
 self.addEventListener('fetch', e => {
-  if (e.request.url.includes('script.google.com')) return;
   e.respondWith(
     fetch(e.request).then(res => {
       const clone = res.clone();
