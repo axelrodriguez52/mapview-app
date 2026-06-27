@@ -2394,22 +2394,20 @@ function fetchKmlsFromSheet() {
     })
     .then(data => {
       if (data.kmls && data.kmls.length > 0) {
-        const cleaned = {};
+        const grouped = {};
         data.kmls.forEach(k => {
-          if (!k.fileName || k.fileName === 'fileName' || !k.blocks || k.blocks.length === 0) return;
-          if (k.blocks.length === 1 && k.blocks[0].name === 'blockName') return;
-          if (!cleaned[k.fileName]) {
-            cleaned[k.fileName] = { fileName: k.fileName, blocks: [] };
+          if (!k.fileName || k.fileName === 'fileName' || k.fileName === 'fileName') return;
+          if (!k.blockName || k.blockName === 'blockName' || !k.coords) return;
+          if (!grouped[k.fileName]) {
+            grouped[k.fileName] = { fileName: k.fileName, blocks: [] };
           }
-          const seen = new Set(cleaned[k.fileName].blocks.map(b => b.name));
-          k.blocks.forEach(b => {
-            if (b.name && b.coords && !seen.has(b.name)) {
-              cleaned[k.fileName].blocks.push(b);
-              seen.add(b.name);
-            }
-          });
+          const seen = new Set(grouped[k.fileName].blocks.map(b => b.name));
+          if (!seen.has(k.blockName)) {
+            grouped[k.fileName].blocks.push({ name: k.blockName, coords: k.coords });
+            seen.add(k.blockName);
+          }
         });
-        const sheetsKmls = Object.values(cleaned).filter(k => k.blocks.length > 0);
+        const sheetsKmls = Object.values(grouped).filter(k => k.blocks.length > 0);
         if (sheetsKmls.length > 0) {
           allKmlData = sheetsKmls;
           saveKmlToStorage();
