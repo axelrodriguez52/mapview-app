@@ -2429,10 +2429,11 @@ function fetchKmlsFromSheet() {
 
 function saveKmlToSheet(fileName, blocks) {
   const payload = JSON.stringify({ action: 'saveKml', fileName: fileName, blocks: blocks });
+  const body = 'postData=' + encodeURIComponent(payload);
   return fetch(GOOGLE_SHEETS_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'text/plain' },
-    body: payload
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: body
   }).then(r => r.json()).then(data => {
     console.log(`[MapView] KML guardado: ${fileName} (${blocks.length} bloques)`, data);
     return data;
@@ -3190,7 +3191,8 @@ function saveToSheet() {
  * 3. Borra el contenido por defecto y pega este código:
  *
  *    function doPost(e) {
- *      var data = JSON.parse(e.postData.contents);
+ *      var raw = e.postData ? e.postData.contents : e.parameter.postData;
+ *      var data = JSON.parse(raw);
  *
  *      if (data.action === 'saveKml') {
  *        var ss = SpreadsheetApp.getActiveSpreadsheet();
