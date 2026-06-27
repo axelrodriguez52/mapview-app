@@ -2295,18 +2295,16 @@ function fetchRecords() {
   return fetch(`${GOOGLE_SHEETS_URL}?action=getRecords`)
     .then(r => r.json())
     .then(data => {
-      if (data.records) {
-        sheetRecords = data.records;
-        buildRecordsMap();
-        recordsLoaded = true;
-        console.log(`[MapView] Registros cargados: ${sheetRecords.length}`, recordsMap);
-      }
+      sheetRecords = data.records || [];
+      buildRecordsMap();
+      recordsLoaded = true;
+      console.log(`[MapView] Registros cargados: ${sheetRecords.length}`, recordsMap);
     })
     .catch((err) => {
       console.warn('[MapView] Error al cargar registros de Google Sheets:', err);
       sheetRecords = [];
       recordsMap = {};
-      recordsLoaded = false;
+      recordsLoaded = true;
     });
 }
 
@@ -3137,41 +3135,38 @@ function saveToSheet() {
   statusEl.className = 'save-status';
   statusEl.textContent = '';
 
-  const payload = {
+  const payload = JSON.stringify({
+    action: 'addRecord',
     publicador: publisher,
     territorio: block.name,
     mapName: mapData.name,
-    fecha_inicio: dateStart || '',
-    fecha_fin: dateEnd || ''
-  };
+    fechaInicio: dateStart || '',
+    fechaFin: dateEnd || ''
+  });
 
-  fetch(GOOGLE_SHEETS_URL, {
-    method: 'POST',
-    mode: 'no-cors',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  })
-  .then(() => {
-    statusEl.className = 'save-status success';
-    statusEl.textContent = 'Guardado correctamente en Google Sheets.';
-    btn.disabled = false;
-    btn.innerHTML = `
-      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M13 2H3a1 1 0 00-1 1v10a1 1 0 001 1h10a1 1 0 001-1V3a1 1 0 00-1-1z"/>
-        <path d="M5 8l2 2 4-4"/>
-      </svg>
-      Grabar en Sheets`;
-    fetchRecords();
-  })
-  .catch(() => {
-    statusEl.className = 'save-status error';
-    statusEl.textContent = 'No se pudo guardar. Intenta de nuevo.';
-    btn.disabled = false;
-    btn.innerHTML = `
-      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M13 2H3a1 1 0 00-1 1v10a1 1 0 001 1h10a1 1 0 001-1V3a1 1 0 00-1-1z"/>
-        <path d="M5 8l2 2 4-4"/>
-      </svg>
+  fetch(`${GOOGLE_SHEETS_URL}?action=addRecord&d=${encodeURIComponent(payload)}`)
+    .then(r => r.json())
+    .then(data => {
+      if (data.status === 'ok') {
+        statusEl.className = 'save-status success';
+        statusEl.textContent = 'Guardado correctamente en Google Sheets.';
+        fetchRecords();
+      } else {
+        throw new Error('Server error');
+      }
+    })
+    .catch(() => {
+      statusEl.className = 'save-status error';
+      statusEl.textContent = 'No se pudo guardar. Intenta de nuevo.';
+    })
+    .finally(() => {
+      btn.disabled = false;
+      btn.innerHTML = `
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M13 2H3a1 1 0 00-1 1v10a1 1 0 001 1h10a1 1 0 001-1V3a1 1 0 00-1-1z"/>
+          <path d="M5 8l2 2 4-4"/>
+        </svg>
+        Grabar en Sheets`;
       Grabar en Sheets`;
   });
 }
@@ -3424,6 +3419,33 @@ function saveToSheet() {
  *            kmlSheet.getRange(2, 1, keepRows.length, 3).setValues(keepRows);
  *          }
  *        }
+ *        return ContentService
+ *          .createTextOutput(JSON.stringify({ status: 'ok' }))
+ *          .setMimeType(ContentService.MimeType.JSON);
+ *      }
+ *
+ *      if (action === 'addRecord') {
+ *        var ss = SpreadsheetApp.getActiveSpreadsheet();
+ *        var sheet = ss.getSheetByName('Registros');
+ *        if (!sheet) sheet = ss.insertSheet('Registros');
+ *
+ *        var payload = JSON.parse(e.parameter.d);
+ *
+ *        var headers = sheet.getLastColumn() > 0 ? sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0] : [];
+ *        var colIndex = -1;
+ *        for (var h = 0; h < headers.length; h++) {
+ *          if (headers[h].toString().trim() === payload.mapName.trim()) { colIndex = h + 1; break; }
+ *        }
+ *        if (colIndex === -1) {
+ *          colIndex = sheet.getLastColumn() + 1;
+ *          sheet.getRange(1, colIndex).setValue(payload.mapName);
+ *        }
+ *
+ *        var row = [payload.publicador, payload.fechaInicio, payload.fechaFin];
+ *        for (var c = 4; c <= sheet.getLastColumn(); c++) { row.push(''); }
+ *        row[colIndex - 1] = payload.territorio;
+ *        sheet.appendRow(row);
+ *
  *        return ContentService
  *          .createTextOutput(JSON.stringify({ status: 'ok' }))
  *          .setMimeType(ContentService.MimeType.JSON);
