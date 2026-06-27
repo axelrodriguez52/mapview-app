@@ -2182,6 +2182,7 @@ applyTheme(getPreferredTheme());
 $themeToggle.addEventListener('click', () => {
   const current = document.documentElement.getAttribute('data-theme');
   applyTheme(current === 'dark' ? 'light' : 'dark');
+  syncMapLayer();
 });
 
 // ── ADMIN SYSTEM ──
@@ -2466,22 +2467,41 @@ function debounce(fn, ms) {
 }
 
 // ── MAP INIT ──
-const vistaEstandar = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+const vistaEstandarDark = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+  attribution: '&copy; OpenStreetMap &copy; CARTO'
+});
+const vistaEstandarLight = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
   attribution: '&copy; OpenStreetMap &copy; CARTO'
 });
 const vistaSatelital = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
   attribution: 'Tiles &copy; Esri'
 });
 
+const initialTheme = getPreferredTheme();
+const initialLayer = initialTheme === 'light' ? vistaEstandarLight : vistaSatelital;
+
 map = L.map('map', {
   center: [19.211, -70.348],
   zoom: 15,
-  layers: [vistaEstandar],
+  layers: [initialLayer],
   zoomControl: true
 });
 
-const baseMaps = { "Estándar": vistaEstandar, "Satelital": vistaSatelital };
+const baseMaps = { "Estándar": vistaEstandarDark, "Satelital": vistaSatelital };
 L.control.layers(baseMaps, null, { position: 'bottomleft', collapsed: false }).addTo(map);
+
+function syncMapLayer() {
+  const current = document.documentElement.getAttribute('data-theme');
+  if (current === 'light') {
+    map.addLayer(vistaEstandarLight);
+    map.removeLayer(vistaSatelital);
+    map.removeLayer(vistaEstandarDark);
+  } else {
+    map.addLayer(vistaSatelital);
+    map.removeLayer(vistaEstandarLight);
+    map.removeLayer(vistaEstandarDark);
+  }
+}
 
 map.on('baselayerchange', (e) => {
   const container = document.getElementById('map-container');
