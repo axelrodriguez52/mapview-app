@@ -2399,11 +2399,16 @@ function fetchKmlsFromSheet() {
           if (!grouped[k.fileName]) {
             grouped[k.fileName] = { fileName: k.fileName, blocks: [] };
           }
-          const seen = new Set(grouped[k.fileName].blocks.map(b => b.name));
-          if (!seen.has(k.blockName)) {
-            grouped[k.fileName].blocks.push({ name: k.blockName, coords: k.coords });
-            seen.add(k.blockName);
+          const nameCount = {};
+          grouped[k.fileName].blocks.forEach(b => {
+            nameCount[b.name] = (nameCount[b.name] || 0) + 1;
+          });
+          let name = k.blockName;
+          if (nameCount[name]) {
+            name = name + ' (' + (nameCount[name] + 1) + ')';
           }
+          grouped[k.fileName].blocks.push({ name: name, coords: k.coords });
+          nameCount[k.blockName] = (nameCount[k.blockName] || 0) + 1;
         });
         const sheetsKmls = Object.values(grouped).filter(k => k.blocks.length > 0);
         if (sheetsKmls.length > 0) {
@@ -3374,14 +3379,20 @@ function saveToSheet() {
  *
  *        var existing = kmlSheet.getDataRange().getValues();
  *        var existingNames = [];
+ *        var existingCoords = [];
  *        for (var i = 1; i < existing.length; i++) {
  *          if (existing[i][0] === payload.fileName) {
  *            existingNames.push(existing[i][1]);
+ *            existingCoords.push(existing[i][2]);
  *          }
  *        }
  *
  *        payload.blocks.forEach(function(block) {
- *          if (existingNames.indexOf(block.name) === -1) {
+ *          var isDupe = false;
+ *          for (var e = 0; e < existingNames.length; e++) {
+ *            if (existingNames[e] === block.name && existingCoords[e] === block.coords) { isDupe = true; break; }
+ *          }
+ *          if (!isDupe) {
  *            kmlSheet.appendRow([payload.fileName, block.name, block.coords]);
  *          }
  *        });
