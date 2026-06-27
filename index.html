@@ -2385,70 +2385,72 @@ function deleteKmlData(fileName) {
 }
 
 // ── KML SHARED STORAGE (Google Sheets) ──
-let kmlsSavedToSheet = 0;
-let kmlsFailedToSave = 0;
-
 function fetchKmlsFromSheet() {
-  console.log('[MapView] Intentando cargar KMLs desde Google Sheets...');
+  console.log('[MapView] Cargando KMLs desde Google Sheets...');
   return fetch(`${GOOGLE_SHEETS_URL}?action=getKmls`)
     .then(r => r.json())
     .then(data => {
-      console.log('[MapView] Respuesta getKmls:', data);
       if (data.kmls && data.kmls.length > 0) {
-        allKmlData = data.kmls.filter(k =>
-          k.fileName &&
-          k.fileName !== 'fileName' &&
-          k.blocks &&
-          k.blocks.length > 0 &&
-          !(k.blocks.length === 1 && k.blocks[0].name === 'blockName')
-        );
+        const cleaned = {};
+        data.kmls.forEach(k => {
+          if (!k.fileName || k.fileName === 'fileName' || !k.blocks || k.blocks.length === 0) return;
+          if (k.blocks.length === 1 && k.blocks[0].name === 'blockName') return;
+          if (!cleaned[k.fileName]) {
+            cleaned[k.fileName] = k;
+          } else {
+            const seen = new Set(cleaned[k.fileName].blocks.map(b => b.name));
+            k.blocks.forEach(b => {
+              if (!seen.has(b.name)) {
+                cleaned[k.fileName].blocks.push(b);
+                seen.add(b.name);
+              }
+            });
+          }
+        });
+        allKmlData = Object.values(cleaned);
         saveKmlToStorage();
-        console.log(`[MapView] KMLs cargados desde Google Sheets: ${allKmlData.length}`);
+        console.log(`[MapView] KMLs cargados: ${allKmlData.length} mapas, ${allKmlData.reduce((s, k) => s + k.blocks.length, 0)} poligonos`);
         return true;
       }
-      console.log('[MapView] No hay KMLs en Google Sheets');
       return false;
     })
     .catch(err => {
-      console.warn('[MapView] Error al cargar KMLs de Google Sheets:', err);
+      console.warn('[MapView] Error cargando KMLs de Sheets:', err);
       return false;
     });
 }
 
 function saveKmlToSheet(fileName, blocks) {
-  console.log(`[MapView] Guardando KML en Sheets: ${fileName} (${blocks.length} bloques)`);
   return fetch(GOOGLE_SHEETS_URL, {
     method: 'POST',
     mode: 'no-cors',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ action: 'saveKml', fileName: fileName, blocks: blocks })
   }).then(() => {
-    kmlsSavedToSheet++;
-    console.log(`[MapView] KML guardado OK en Sheets: ${fileName}`);
+    console.log(`[MapView] KML guardado: ${fileName} (${blocks.length} bloques)`);
   }).catch(err => {
-    kmlsFailedToSave++;
-    console.warn('[MapView] Error guardando KML en Sheets:', fileName, err);
+    console.warn('[MapView] Error guardando KML:', fileName, err);
   });
 }
 
 function saveAllKmlsToSheet() {
   if (!isAdmin || allKmlData.length === 0) return;
-  kmlsSavedToSheet = 0;
-  kmlsFailedToSave = 0;
-  showWorkflowToast('Sincronizando mapas con la nube...', '☁️', 3000);
+  showWorkflowToast('Sincronizando mapas con la nube...', '☁️', 5000);
 
-  const promises = allKmlData.map(k => saveKmlToSheet(k.fileName, k.blocks));
-  Promise.all(promises).then(() => {
-    if (kmlsFailedToSave > 0) {
-      showWorkflowToast(`⚠️ ${kmlsFailedToSave} mapa(s) no se pudieron sincronizar. Reintenta subir.`, '❌', 5000);
-    } else {
-      showWorkflowToast(`${kmlsSavedToSheet} mapa(s) sincronizados en la nube ✓`, '☁️', 3000);
-    }
+  let chain = Promise.resolve();
+  allKmlData.forEach(k => {
+    chain = chain.then(() => saveKmlToSheet(k.fileName, k.blocks))
+                 .then(() => new Promise(r => setTimeout(r, 300)));
+  });
+
+  chain.then(() => {
+    showWorkflowToast(`${allKmlData.length} mapa(s) sincronizados en la nube ✓`, '☁️', 3000);
+  }).catch(() => {
+    showWorkflowToast('Error al sincronizar. Reintenta.', '❌', 5000);
   });
 }
 
 function deleteKmlFromSheet(fileName) {
-  console.log(`[MapView] Eliminando KML de Sheets: ${fileName}`);
   return fetch(GOOGLE_SHEETS_URL, {
     method: 'POST',
     mode: 'no-cors',
@@ -3182,37 +3184,51 @@ function saveToSheet() {
  *        }
  *
  *        var allData = kmlSheet.getDataRange().getValues();
- *        var rowsToDelete = [];
- *        for (var i = allData.length - 1; i >= 1; i--) {
- *          if (allData[i][0] === data.fileName) rowsToDelete.push(i + 1);
+ *        var keepRows = [];
+ *        for (var i = 1; i < allData.length; i++) {
+ *          if (allData[i][0] !== data.fileName) {
+ *            keepRows.push(allData[i]);
+ *          }
  *        }
- *        rowsToDelete.forEach(function(r) { kmlSheet.deleteRow(r); });
  *
  *        data.blocks.forEach(function(block) {
- *          kmlSheet.appendRow([data.fileName, block.name, block.coords]);
+ *          keepRows.push([data.fileName, block.name, block.coords]);
  *        });
  *
+ *        kmlSheet.deleteRows(2, kmlSheet.getLastRow() - 1);
+ *        if (keepRows.length > 0) {
+ *          kmlSheet.getRange(2, 1, keepRows.length, 3).setValues(keepRows);
+ *        }
+ *
  *        var regSheet = ss.getSheetByName('Registros');
- *        if (regSheet) {
+ *        if (regSheet && regSheet.getLastColumn() >= 1) {
  *          var headers = regSheet.getRange(1, 1, 1, regSheet.getLastColumn()).getValues()[0];
- *          var colIdx = headers.indexOf(data.fileName);
- *          if (colIdx === -1) {
+ *          var found = false;
+ *          for (var h = 0; h < headers.length; h++) {
+ *            if (headers[h].toString() === data.fileName) { found = true; break; }
+ *          }
+ *          if (!found) {
  *            regSheet.getRange(1, headers.length + 1).setValue(data.fileName);
  *          }
  *        }
  *
  *        return ContentService
- *          .createTextOutput(JSON.stringify({ status: 'ok' }))
+ *          .createTextOutput(JSON.stringify({ status: 'ok', count: data.blocks.length }))
  *          .setMimeType(ContentService.MimeType.JSON);
  *      }
  *
  *      if (data.action === 'deleteKml') {
  *        var ss = SpreadsheetApp.getActiveSpreadsheet();
  *        var kmlSheet = ss.getSheetByName('KMLs');
- *        if (kmlSheet && kmlSheet.getLastRow() > 0) {
+ *        if (kmlSheet && kmlSheet.getLastRow() > 1) {
  *          var allData = kmlSheet.getDataRange().getValues();
- *          for (var i = allData.length - 1; i >= 1; i--) {
- *            if (allData[i][0] === data.fileName) kmlSheet.deleteRow(i + 1);
+ *          var keepRows = [];
+ *          for (var i = 1; i < allData.length; i++) {
+ *            if (allData[i][0] !== data.fileName) keepRows.push(allData[i]);
+ *          }
+ *          kmlSheet.deleteRows(2, kmlSheet.getLastRow() - 1);
+ *          if (keepRows.length > 0) {
+ *            kmlSheet.getRange(2, 1, keepRows.length, 3).setValues(keepRows);
  *          }
  *        }
  *        return ContentService
@@ -3310,15 +3326,22 @@ function saveToSheet() {
  *        if (kmlSheet && kmlSheet.getLastRow() > 1) {
  *          var data = kmlSheet.getDataRange().getValues();
  *          var kmlMap = {};
+ *          var kmlOrder = [];
  *          for (var i = 1; i < data.length; i++) {
- *            var fn = data[i][0] ? data[i][0].toString() : '';
- *            var bn = data[i][1] ? data[i][1].toString() : '';
- *            var co = data[i][2] ? data[i][2].toString() : '';
- *            if (!kmlMap[fn]) kmlMap[fn] = [];
- *            kmlMap[fn].push({ name: bn, coords: co });
+ *            var fn = data[i][0] ? data[i][0].toString().trim() : '';
+ *            var bn = data[i][1] ? data[i][1].toString().trim() : '';
+ *            var co = data[i][2] ? data[i][2].toString().trim() : '';
+ *            if (!fn || !bn || !co) continue;
+ *            if (!kmlMap[fn]) { kmlMap[fn] = {}; kmlOrder.push(fn); }
+ *            kmlMap[fn][bn] = co;
  *          }
- *          kmls = Object.keys(kmlMap).map(function(fn) {
- *            return { fileName: fn, blocks: kmlMap[fn] };
+ *          kmls = kmlOrder.map(function(fn) {
+ *            return {
+ *              fileName: fn,
+ *              blocks: Object.keys(kmlMap[fn]).map(function(bn) {
+ *                return { name: bn, coords: kmlMap[fn][bn] };
+ *              })
+ *            };
  *          });
  *        }
  *
@@ -3336,7 +3359,6 @@ function saveToSheet() {
  *
  * 5. La hoja "Registros" se crea automáticamente con columnas:
  *    Publicador | Fecha Inicio | Fecha Fin | MapName1 | MapName2 | ...
- *    Cada mapa cargado crea su propia columna.
  *
  * 6. La hoja "KMLs" se crea automáticamente al subir el primer KML.
  *    - Columnas: fileName | blockName | coords
