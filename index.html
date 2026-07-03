@@ -14,7 +14,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-<script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
 <style>
 
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -98,13 +98,8 @@
     display: flex; align-items: center; justify-content: center;
     font-size: 2rem;
     box-shadow: 0 0 40px rgba(59,130,246,0.4);
-    animation: introIconEntrance 0.8s var(--ease-spring) both 0.1s, pulse-glow 2.5s ease-in-out infinite 0.8s;
-    transform: scale(0.5);
     opacity: 0;
-  }
-  @keyframes introIconEntrance {
-    0% { transform: scale(0.5); opacity: 0; }
-    100% { transform: scale(1); opacity: 1; }
+    transform: scale(0.5);
   }
   @keyframes pulse-glow {
     0%, 100% { box-shadow: 0 0 40px rgba(59,130,246,0.4); }
@@ -115,23 +110,16 @@
     letter-spacing: 0.18em;
     background: linear-gradient(135deg, #e2e8f0, var(--accent2));
     -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-    animation: introTextFade 0.7s var(--ease-smooth) both 0.3s;
-    transform: translateY(10px);
     opacity: 0;
+    transform: translateY(12px);
   }
   #intro p {
     font-size: 0.78rem; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase;
-    animation: introTextFade 0.7s var(--ease-smooth) both 0.5s;
-    transform: translateY(8px);
     opacity: 0;
-  }
-  @keyframes introTextFade {
-    0% { transform: translateY(10px); opacity: 0; }
-    100% { transform: translateY(0); opacity: 1; }
+    transform: translateY(10px);
   }
   .bar-track {
     width: 200px; height: 2px; background: var(--border); overflow: hidden; border-radius: 2px;
-    animation: introTextFade 0.6s var(--ease-smooth) both 0.6s;
     opacity: 0;
   }
   .bar-fill { height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent), var(--teal)); border-radius: 2px; }
@@ -284,12 +272,7 @@
     border: 2px dashed rgba(59,130,246,0.25);
     display: flex; align-items: center; justify-content: center;
     font-size: 2.2rem;
-    animation: emptyPulse 3.5s ease-in-out infinite;
     transition: all 0.4s var(--ease-apple);
-  }
-  @keyframes emptyPulse {
-    0%, 100% { border-color: rgba(59,130,246,0.25); transform: scale(1); }
-    50% { border-color: rgba(59,130,246,0.5); transform: scale(1.03); }
   }
   .map-empty-title {
     font-size: 1.1rem; font-weight: 600;
@@ -361,14 +344,9 @@
     z-index: 950;
     pointer-events: none;
     opacity: 0;
-    transition: all 0.4s var(--ease-spring);
     max-width: 420px;
     text-align: center;
     box-shadow: 0 8px 32px rgba(0,0,0,0.4);
-  }
-  .workflow-toast.visible {
-    opacity: 1;
-    transform: translateX(-50%) translateY(0) scale(1);
   }
   .workflow-toast-icon {
     font-size: 1rem;
@@ -392,7 +370,6 @@
     box-shadow: 0 0 30px rgba(96,165,250,0.12), 0 8px 32px rgba(0,0,0,0.3);
     display: none;
     text-align: center;
-    transition: all 0.4s var(--ease-spring);
     opacity: 0;
   }
   .hud-eyebrow { font-size: 0.55rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.15em; margin-bottom: 0.15rem; }
@@ -776,12 +753,6 @@
     cursor: pointer;
     border-left: 2px solid transparent;
     transition: all 0.25s var(--ease-apple);
-    opacity: 0;
-    animation: blockFadeIn 0.4s var(--ease-smooth) forwards;
-  }
-  @keyframes blockFadeIn {
-    from { opacity: 0; transform: translateX(-8px); }
-    to { opacity: 1; transform: translateX(0); }
   }
   .block-item:hover { background: rgba(59,130,246,0.06); }
   .block-item.active { background: rgba(59,130,246,0.1); border-left-color: var(--accent); }
@@ -889,11 +860,6 @@
   }
   .detail-form {
     display: flex; flex-direction: column; gap: 0.55rem;
-    animation: formSlideIn 0.4s var(--ease-spring) forwards;
-  }
-  @keyframes formSlideIn {
-    from { opacity: 0; transform: translateY(12px); }
-    to { opacity: 1; transform: translateY(0); }
   }
   .detail-form label {
     display: flex; flex-direction: column; gap: 0.25rem;
@@ -976,7 +942,6 @@
     justify-content: center;
     padding: 1.5rem;
     overflow-y: auto;
-    animation: fadeIn 0.3s var(--ease-smooth);
   }
   #map-selector.active { display: flex; }
 
@@ -984,9 +949,6 @@
     text-align: center;
     margin-bottom: 1.5rem;
     flex-shrink: 0;
-    animation: introTextFade 0.5s var(--ease-smooth) both 0.1s;
-    opacity: 0;
-    transform: translateY(10px);
   }
   .selector-header h2 {
     font-size: 1.3rem; font-weight: 700;
@@ -1023,12 +985,6 @@
     display: flex; flex-direction: column; gap: 0.5rem;
     position: relative;
     overflow: hidden;
-    opacity: 0;
-    animation: cardStaggerIn 0.5s var(--ease-spring) forwards;
-  }
-  @keyframes cardStaggerIn {
-    from { opacity: 0; transform: translateY(16px) scale(0.96); }
-    to { opacity: 1; transform: translateY(0) scale(1); }
   }
   .selector-card:hover {
     border-color: var(--accent);
@@ -1778,11 +1734,7 @@
     box-shadow: 0 4px 20px rgba(37,99,235,0.25);
   }
   [data-theme="light"] .intro-icon {
-    animation: introGlowLight 2s ease-in-out infinite;
-  }
-  @keyframes introGlowLight {
-    0%, 100% { box-shadow: 0 4px 20px rgba(37,99,235,0.25); }
-    50% { box-shadow: 0 4px 30px rgba(37,99,235,0.4), 0 4px 20px rgba(13,148,136,0.2); }
+    box-shadow: 0 4px 20px rgba(37,99,235,0.25);
   }
   [data-theme="light"] .custom-poly {
     filter: drop-shadow(0 1px 3px rgba(0,0,0,0.08));
@@ -1890,13 +1842,8 @@
     align-items: center;
     justify-content: center;
     padding: 1rem;
-    animation: fadeIn 0.25s var(--ease-smooth);
   }
   .login-modal.active { display: flex; }
-  @keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
-  }
   .login-box {
     background: var(--surface);
     border: 1px solid var(--border2);
@@ -1907,12 +1854,7 @@
     display: flex;
     flex-direction: column;
     gap: 1rem;
-    animation: loginSpring 0.45s var(--ease-spring);
     box-shadow: 0 24px 80px rgba(0,0,0,0.5);
-  }
-  @keyframes loginSpring {
-    0% { opacity: 0; transform: scale(0.9) translateY(10px); }
-    100% { opacity: 1; transform: scale(1) translateY(0); }
   }
   .login-box h3 {
     font-size: 0.9rem;
@@ -2347,7 +2289,20 @@ $adminLoginBtn.addEventListener('click', () => {
   $loginPassword.value = '';
   $loginError.classList.remove('show');
   $loginModal.classList.add('active');
-  setTimeout(() => $loginPassword.focus(), 100);
+  gsap.fromTo($loginModal, { opacity: 0 }, { opacity: 1, duration: 0.3, ease: 'power2.out' });
+  gsap.fromTo('.login-box', {
+    opacity: 0,
+    scale: 0.9,
+    y: 12
+  }, {
+    opacity: 1,
+    scale: 1,
+    y: 0,
+    duration: 0.45,
+    ease: 'back.out(1.5)',
+    delay: 0.05
+  });
+  setTimeout(() => $loginPassword.focus(), 200);
 });
 
 $adminLogoutBtn.addEventListener('click', () => {
@@ -2355,7 +2310,19 @@ $adminLogoutBtn.addEventListener('click', () => {
 });
 
 $loginCancel.addEventListener('click', () => {
-  $loginModal.classList.remove('active');
+  gsap.to('.login-box', {
+    opacity: 0,
+    scale: 0.92,
+    y: 8,
+    duration: 0.25,
+    ease: 'power2.in'
+  });
+  gsap.to($loginModal, {
+    opacity: 0,
+    duration: 0.3,
+    ease: 'power2.in',
+    onComplete: () => { $loginModal.classList.remove('active'); }
+  });
 });
 
 $loginModal.addEventListener('click', (e) => {
@@ -3008,6 +2975,17 @@ function renderMapList() {
     fragment.appendChild(item);
   });
   list.appendChild(fragment);
+
+  gsap.fromTo($mapList.querySelectorAll('.map-item'), {
+    opacity: 0,
+    x: -8
+  }, {
+    opacity: 1,
+    x: 0,
+    duration: 0.35,
+    stagger: 0.04,
+    ease: 'power3.out'
+  });
 }
 
 function renderBlockList() {
@@ -3035,7 +3013,6 @@ function renderBlockList() {
       item.dataset.localId = key.localId;
       item.dataset.name = block.name.toLowerCase();
       item.dataset.searchText = `${mapData.name} ${block.name}`.toLowerCase();
-      item.style.animationDelay = `${Math.min(idx * 25, 300)}ms`;
       item.innerHTML = `
         <div class="block-color-pip" style="background:${mapData.color.solid}"></div>
         <span class="num">${String(idx+1).padStart(2,'0')}</span>
@@ -3052,6 +3029,17 @@ function renderBlockList() {
     });
   });
   list.appendChild(fragment);
+
+  gsap.fromTo($blockList.querySelectorAll('.block-item'), {
+    opacity: 0,
+    x: -12
+  }, {
+    opacity: 1,
+    x: 0,
+    duration: 0.4,
+    stagger: 0.03,
+    ease: 'power3.out'
+  });
 }
 
 // Sidebar upload button delegation
@@ -3118,9 +3106,14 @@ function selectBlock(key) {
   selectedBlockKey = key;
 
   if (key === null) {
-    hud.style.opacity = '0';
-    hud.style.transform = 'translateX(-50%) translateY(-10px) scale(0.96)';
-    setTimeout(() => { hud.style.display = 'none'; }, 350);
+    gsap.to(hud, {
+      opacity: 0,
+      y: -10,
+      scale: 0.96,
+      duration: 0.3,
+      ease: 'power2.in',
+      onComplete: () => { hud.style.display = 'none'; }
+    });
     resetDetail();
     return;
   }
@@ -3171,13 +3164,16 @@ function selectBlock(key) {
 
   $hudName.textContent = `${mapData.name} — ${block.name}`;
   hud.style.display = "block";
-  hud.style.opacity = '0';
-  hud.style.transform = 'translateX(-50%) translateY(-10px) scale(0.96)';
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      hud.style.opacity = '1';
-      hud.style.transform = 'translateX(-50%) translateY(0) scale(1)';
-    });
+  gsap.fromTo(hud, {
+    opacity: 0,
+    y: -12,
+    scale: 0.96
+  }, {
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    duration: 0.5,
+    ease: 'back.out(1.5)'
   });
 
   $dName.textContent = block.name;
@@ -3208,6 +3204,15 @@ function selectBlock(key) {
   `;
 
   $dForm.style.display = 'flex';
+  gsap.fromTo($dForm, {
+    opacity: 0,
+    y: 12
+  }, {
+    opacity: 1,
+    y: 0,
+    duration: 0.45,
+    ease: 'back.out(1.3)'
+  });
   $dPublisher.value = '';
   $dDateStart.value = '';
   $dDateEnd.value = '';
@@ -3813,10 +3818,42 @@ function openMapSelector() {
   });
 
   $mapSelector.classList.add('active');
+
+  gsap.fromTo('.selector-header', {
+    opacity: 0,
+    y: 16
+  }, {
+    opacity: 1,
+    y: 0,
+    duration: 0.5,
+    ease: 'power3.out'
+  });
+
+  gsap.fromTo('.selector-card', {
+    opacity: 0,
+    y: 20,
+    scale: 0.95
+  }, {
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    duration: 0.5,
+    stagger: 0.07,
+    ease: 'back.out(1.4)',
+    delay: 0.15
+  });
 }
 
 function loadSelectedMap(index) {
-  $mapSelector.classList.remove('active');
+  gsap.to($mapSelector, {
+    opacity: 0,
+    duration: 0.3,
+    ease: 'power2.in',
+    onComplete: () => {
+      $mapSelector.classList.remove('active');
+      $mapSelector.style.opacity = '';
+    }
+  });
 
   const kml = allKmlData[index];
   loadedMaps = [];
@@ -3871,12 +3908,20 @@ function openSidebar() {
   $sidebar.classList.add('open');
   $sidebarOverlay.classList.add('active');
   $menuToggle.setAttribute('aria-label', 'Cerrar menú');
+  gsap.fromTo($sidebarOverlay, { opacity: 0 }, { opacity: 1, duration: 0.3, ease: 'power2.out' });
 }
 
 function closeSidebar() {
-  $sidebar.classList.remove('open');
-  $sidebarOverlay.classList.remove('active');
-  $menuToggle.setAttribute('aria-label', 'Abrir menú');
+  gsap.to($sidebarOverlay, {
+    opacity: 0,
+    duration: 0.25,
+    ease: 'power2.in',
+    onComplete: () => {
+      $sidebar.classList.remove('open');
+      $sidebarOverlay.classList.remove('active');
+      $menuToggle.setAttribute('aria-label', 'Abrir menú');
+    }
+  });
 }
 
 $menuToggle.addEventListener('click', () => {
@@ -3916,9 +3961,27 @@ function showWorkflowToast(text, icon, duration) {
   clearTimeout(toastTimer);
   $workflowToastText.textContent = text;
   $workflowToast.querySelector('.workflow-toast-icon').textContent = icon || '👆';
-  $workflowToast.classList.add('visible');
+
+  gsap.fromTo($workflowToast, {
+    opacity: 0,
+    y: 20,
+    scale: 0.95
+  }, {
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    duration: 0.45,
+    ease: 'back.out(1.4)'
+  });
+
   toastTimer = setTimeout(() => {
-    $workflowToast.classList.remove('visible');
+    gsap.to($workflowToast, {
+      opacity: 0,
+      y: 12,
+      scale: 0.97,
+      duration: 0.3,
+      ease: 'power2.in'
+    });
   }, duration || 4000);
 }
 
@@ -3942,22 +4005,49 @@ function showApp() {
 fetchKmlsFromSheet().then(ok => {
   if (ok) saveKmlToStorage();
 }).finally(() => {
-  anime({
-    targets: '#bar-fill',
-    width: ['0%', '100%'],
-    duration: 1400,
-    easing: 'easeInOutQuad',
-    complete: () => {
-      anime({
-        targets: '#intro',
-        opacity: [1, 0],
-        scale: [1, 0.96],
-        duration: 500,
-        easing: 'easeInQuad',
-        complete: showApp
-      });
-    }
-  });
+  const introTL = gsap.timeline({ defaults: { ease: 'power3.out' } });
+
+  introTL
+    .to('.intro-icon', {
+      scale: 1,
+      opacity: 1,
+      duration: 0.7,
+      ease: 'back.out(1.7)'
+    })
+    .to('#intro h1', {
+      y: 0,
+      opacity: 1,
+      duration: 0.6
+    }, '-=0.3')
+    .to('#intro p', {
+      y: 0,
+      opacity: 1,
+      duration: 0.5
+    }, '-=0.35')
+    .to('.bar-track', {
+      opacity: 1,
+      duration: 0.4
+    }, '-=0.25')
+    .to('.intro-icon', {
+      keyframes: [
+        { boxShadow: '0 0 60px rgba(59,130,246,0.7), 0 0 80px rgba(20,184,166,0.3)', duration: 0.8 },
+        { boxShadow: '0 0 40px rgba(59,130,246,0.4)', duration: 0.8 }
+      ],
+      repeat: 1,
+      ease: 'sine.inOut'
+    }, '-=0.4')
+    .to('#bar-fill', {
+      width: '100%',
+      duration: 1.4,
+      ease: 'power2.inOut'
+    }, '-=1.6')
+    .to('#intro', {
+      opacity: 0,
+      scale: 0.96,
+      duration: 0.5,
+      ease: 'power2.in',
+      onComplete: showApp
+    });
 });
 
 window.addEventListener('online', () => {
@@ -3967,6 +4057,37 @@ window.addEventListener('online', () => {
 });
 
 updatePendingBadge();
+
+// ── GSAP BUTTON PRESS FEEDBACK ──
+document.addEventListener('mousedown', (e) => {
+  const btn = e.target.closest('.upload-btn, .btn-cambiar-mapa, .btn-grabar, .map-empty-btn, .admin-login-btn, .admin-logout-btn, .theme-toggle, .menu-toggle, .login-submit, .login-cancel, .selector-card-btn');
+  if (!btn) return;
+  gsap.to(btn, { scale: 0.95, duration: 0.12, ease: 'power2.in' });
+});
+document.addEventListener('mouseup', () => {
+  document.querySelectorAll('.upload-btn, .btn-cambiar-mapa, .btn-grabar, .map-empty-btn, .admin-login-btn, .admin-logout-btn, .theme-toggle, .menu-toggle, .login-submit, .login-cancel, .selector-card-btn').forEach(btn => {
+    gsap.to(btn, { scale: 1, duration: 0.25, ease: 'back.out(2)' });
+  });
+});
+
+// ── GSAP AMBIENT ANIMATIONS ──
+gsap.to('.map-empty-icon', {
+  keyframes: [
+    { scale: 1.03, borderColor: 'rgba(59,130,246,0.5)', duration: 1.75 },
+    { scale: 1, borderColor: 'rgba(59,130,246,0.25)', duration: 1.75 }
+  ],
+  repeat: -1,
+  ease: 'sine.inOut'
+});
+
+gsap.to('.status-dot', {
+  keyframes: [
+    { opacity: 0.3, duration: 1 },
+    { opacity: 1, duration: 1 }
+  ],
+  repeat: -1,
+  ease: 'sine.inOut'
+});
 </script>
 <script>
 if ('serviceWorker' in navigator) {
