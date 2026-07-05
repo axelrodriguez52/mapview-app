@@ -232,6 +232,23 @@
     0%, 100% { opacity: 1; }
     50% { opacity: 0.3; }
   }
+  .offline-badge {
+    display: none;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.62rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #f59e0b;
+    background: rgba(245,158,11,0.1);
+    border: 1px solid rgba(245,158,11,0.25);
+    padding: 0.2rem 0.55rem;
+    border-radius: 4px;
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+  .offline-badge svg { width: 11px; height: 11px; }
 
   /* ── MAIN AREA ── */
   main {
@@ -1260,6 +1277,7 @@
     .stat-chip span:first-child { display: none; }
     .stat-chip .val { font-size: 0.68rem; }
     .status-dot { width: 5px; height: 5px; }
+    .offline-badge { font-size: 0.55rem; padding: 0.15rem 0.4rem; }
 
     .admin-badge { display: none !important; }
     .admin-login-btn { font-size: 0.62rem; padding: 0.25rem 0.45rem; min-height: 28px; }
@@ -2007,7 +2025,17 @@
         <span>Bloques</span>
         <span class="val" id="total-count">0</span>
       </div>
-      <div class="status-dot" title="Motor activo"></div>
+      <div class="status-dot" id="status-dot" title="Motor activo"></div>
+      <div class="offline-badge" id="offline-badge" style="display:none;">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="1" y1="1" x2="15" y2="15"/>
+          <path d="M16 12.5A10.3 10.3 0 0 0 3.5 4"/>
+          <path d="M1 4.5A10.3 10.3 0 0 0 12 12"/>
+          <path d="M5 8a5 5 0 0 1 7.5-3.5"/>
+          <path d="M8 8a2 2 0 0 1 2.8-1.4"/>
+        </svg>
+        Offline
+      </div>
       <div class="admin-badge">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
         Admin
@@ -2368,10 +2396,35 @@ if (localStorage.getItem('mapview-admin') === '1') {
 const KML_STORAGE_KEY = 'mapview-kml-data';
 const KML_STORAGE_MAP_KEY = 'mapview-selected-map';
 const PENDING_RECORDS_KEY = 'mapview-pending-records';
+const RECORDS_STORAGE_KEY = 'mapview-records';
 
 let sheetRecords = [];
 let recordsMap = {};
 let recordsLoaded = false;
+
+function saveRecordsToStorage() {
+  try {
+    localStorage.setItem(RECORDS_STORAGE_KEY, JSON.stringify(sheetRecords));
+  } catch (e) {
+    console.warn('[MapView] No se pudieron guardar registros en localStorage:', e);
+  }
+}
+
+function loadRecordsFromStorage() {
+  try {
+    const data = localStorage.getItem(RECORDS_STORAGE_KEY);
+    if (data) {
+      sheetRecords = JSON.parse(data);
+      buildRecordsMap();
+      recordsLoaded = true;
+      console.log(`[MapView] Registros cargados desde localStorage: ${sheetRecords.length}`);
+      return true;
+    }
+  } catch (e) {
+    console.warn('[MapView] Error leyendo registros de localStorage:', e);
+  }
+  return false;
+}
 
 function fetchRecords() {
   return fetch(`${GOOGLE_SHEETS_URL}?action=getRecords`)
@@ -2380,12 +2433,14 @@ function fetchRecords() {
       sheetRecords = data.records || [];
       buildRecordsMap();
       recordsLoaded = true;
-      console.log(`[MapView] Registros cargados: ${sheetRecords.length}`, recordsMap);
+      saveRecordsToStorage();
+      console.log(`[MapView] Registros cargados de Sheets: ${sheetRecords.length}`, recordsMap);
     })
     .catch((err) => {
       console.warn('[MapView] Error al cargar registros de Google Sheets:', err);
-      sheetRecords = [];
-      recordsMap = {};
+      if (!recordsLoaded) {
+        loadRecordsFromStorage();
+      }
       recordsLoaded = true;
     });
 }
@@ -4051,10 +4106,24 @@ fetchKmlsFromSheet().then(ok => {
 });
 
 window.addEventListener('online', () => {
+  document.getElementById('offline-badge').style.display = 'none';
+  document.getElementById('status-dot').style.display = '';
   showWorkflowToast('Conectado. Sincronizando registros offline...', '🔄', 3000);
   syncPendingRecords();
+  fetchRecords();
   fetchKmlsFromSheet().then(ok => { if (ok) saveKmlToStorage(); });
 });
+
+window.addEventListener('offline', () => {
+  document.getElementById('offline-badge').style.display = 'inline-flex';
+  document.getElementById('status-dot').style.display = 'none';
+  showWorkflowToast('Sin conexion. Los datos se guardan localmente.', '📡', 4000);
+});
+
+if (!navigator.onLine) {
+  document.getElementById('offline-badge').style.display = 'inline-flex';
+  document.getElementById('status-dot').style.display = 'none';
+}
 
 updatePendingBadge();
 
@@ -4091,7 +4160,9 @@ gsap.to('.status-dot', {
 </script>
 <script>
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('sw.js').catch(() => {});
+  navigator.serviceWorker.register('sw.js').then(reg => {
+    reg.update().catch(() => {});
+  }).catch(() => {});
 }
 </script>
 </body>
