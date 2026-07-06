@@ -601,6 +601,27 @@
     text-transform: uppercase; letter-spacing: 0.12em;
     color: var(--muted);
   }
+  .visit-legend {
+    display: flex;
+    gap: 0.8rem;
+    padding: 0.45rem 1.1rem;
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+  .visit-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.58rem;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .visit-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
   .sidebar-search {
     position: relative;
     padding: 0.5rem 0.9rem;
@@ -700,6 +721,12 @@
   .map-item-count {
     font-family: 'JetBrains Mono', monospace;
     font-size: 0.6rem; color: var(--muted);
+  }
+  .map-status-summary {
+    display: inline-flex;
+    gap: 0.25rem;
+    margin-left: 0.3rem;
+    font-size: 0.55rem;
   }
 
   .map-toggle {
@@ -2124,6 +2151,11 @@
           </svg>
         </button>
       </div>
+      <div class="visit-legend">
+        <div class="visit-legend-item"><span class="visit-dot" style="background:#10b981;"></span> Reciente (&lt;3 meses)</div>
+        <div class="visit-legend-item"><span class="visit-dot" style="background:#f59e0b;"></span> 3 meses</div>
+        <div class="visit-legend-item"><span class="visit-dot" style="background:#ef4444;"></span> Sin visita (4+ meses)</div>
+      </div>
       <div id="map-list">
         <div class="map-empty">Adjunta archivos KML para comenzar</div>
       </div>
@@ -2435,6 +2467,10 @@ function fetchRecords() {
       recordsLoaded = true;
       saveRecordsToStorage();
       console.log(`[MapView] Registros cargados de Sheets: ${sheetRecords.length}`, recordsMap);
+      if (loadedMaps.length > 0) {
+        renderAllPolygons();
+        renderBlockList();
+      }
     })
     .catch((err) => {
       console.warn('[MapView] Error al cargar registros de Google Sheets:', err);
@@ -2469,6 +2505,46 @@ function parseDateValue(str) {
 
 function getRecordForBlock(blockName) {
   return recordsMap[blockName.toLowerCase().trim()] || null;
+}
+
+// ── VISIT STATUS COLORS ──
+const STATUS_COLORS = {
+  fresh:  { fill: 'rgba(16,185,129,0.28)', stroke: '#10b981', label: 'Reciente', css: '#10b981' },
+  warning:{ fill: 'rgba(245,158,11,0.28)', stroke: '#f59e0b', label: '3 meses',  css: '#f59e0b' },
+  alert:  { fill: 'rgba(239,68,68,0.28)',  stroke: '#ef4444', label: 'Sin visita', css: '#ef4444' }
+};
+
+function getVisitStatus(blockName) {
+  const record = getRecordForBlock(blockName);
+  if (!record) return 'alert';
+
+  const dateStr = record.fecha_fin || record.fecha_inicio || '';
+  if (!dateStr) return 'alert';
+
+  const lastVisit = new Date(dateStr);
+  if (isNaN(lastVisit.getTime())) return 'alert';
+
+  const now = new Date();
+  const diffMs = now.getTime() - lastVisit.getTime();
+  const diffMonths = diffMs / (1000 * 60 * 60 * 24 * 30.44);
+
+  if (diffMonths < 3) return 'fresh';
+  if (diffMonths < 4) return 'warning';
+  return 'alert';
+}
+
+function getVisitStatusInfo(blockName) {
+  const status = getVisitStatus(blockName);
+  const record = getRecordForBlock(blockName);
+  let lastDate = null;
+  if (record) {
+    const dateStr = record.fecha_fin || record.fecha_inicio || '';
+    if (dateStr) {
+      const d = new Date(dateStr);
+      if (!isNaN(d.getTime())) lastDate = d;
+    }
+  }
+  return { status, colors: STATUS_COLORS[status], lastDate };
 }
 
 function saveKmlToStorage() {
@@ -2918,11 +2994,14 @@ function renderAllPolygons() {
     const c = mapData.color;
 
     mapData.blocks.forEach(block => {
+      const visitInfo = getVisitStatusInfo(block.name);
+      const vc = visitInfo.colors;
+
       const polygon = L.polygon(block.latlngs, {
         className: 'custom-poly',
-        fillColor: c.solid,
-        fillOpacity: 0.22,
-        color: c.stroke,
+        fillColor: vc.fill,
+        fillOpacity: 0.28,
+        color: vc.stroke,
         weight: 1.5
       });
       const blockName = block.name;
@@ -2930,17 +3009,13 @@ function renderAllPolygons() {
       polygon.bindTooltip(function() {
         let content = `<div style="font-weight:600;margin-bottom:2px;">${blockName}</div>`;
         content += `<div style="font-size:0.6rem;opacity:0.7;">${mapName}</div>`;
-        const record = getRecordForBlock(blockName);
-        if (record) {
-          const dateStr = record.fecha_fin || record.fecha_inicio || '';
-          if (dateStr) {
-            const d = new Date(dateStr);
-            if (!isNaN(d.getTime())) {
-              const displayDate = d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
-              content += `<div style="margin-top:3px;padding-top:3px;border-top:1px solid rgba(255,255,255,0.15);font-size:0.58rem;color:#10b981;">` +
-                `<span style="opacity:0.7;">Ultimo registro:</span> ${displayDate}</div>`;
-            }
-          }
+        const statusDot = `<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${vc.css};margin-right:4px;vertical-align:middle;"></span>`;
+        content += `<div style="margin-top:3px;padding-top:3px;border-top:1px solid rgba(255,255,255,0.15);font-size:0.58rem;color:${vc.css};">${statusDot}${vc.label}</div>`;
+        if (visitInfo.lastDate) {
+          const displayDate = visitInfo.lastDate.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
+          content += `<div style="font-size:0.55rem;opacity:0.6;margin-top:1px;">Ultima visita: ${displayDate}</div>`;
+        } else {
+          content += `<div style="font-size:0.55rem;opacity:0.6;margin-top:1px;">Sin registro de visita</div>`;
         }
         return content;
       }, { sticky: true, className: 'custom-tooltip', direction: 'top', opacity: 1 });
@@ -2957,7 +3032,7 @@ function renderAllPolygons() {
       const center = polygon.getBounds().getCenter();
       const labelIcon = L.divIcon({
         className: 'map-label',
-        html: `<span style="color:${c.label}">${block.name}</span>`,
+        html: `<span style="color:${vc.stroke}">${block.name}</span>`,
         iconSize: [120, 20]
       });
       layers.push(L.marker(center, { icon: labelIcon, interactive: false }));
@@ -2995,13 +3070,27 @@ function renderMapList() {
   list.innerHTML = '';
   const fragment = document.createDocumentFragment();
   loadedMaps.forEach(m => {
+    let freshCount = 0, warnCount = 0, alertCount = 0;
+    m.blocks.forEach(b => {
+      const s = getVisitStatus(b.name);
+      if (s === 'fresh') freshCount++;
+      else if (s === 'warning') warnCount++;
+      else alertCount++;
+    });
     const item = document.createElement('div');
     item.className = `map-item${m.visible ? ' visible' : ''}${activeMapFilter === m.id ? ' selected' : ''}`;
     item.innerHTML = `
       <div class="map-color-dot" style="background:${m.color.solid}; color:${m.color.solid}"></div>
       <div class="map-item-info">
         <div class="map-item-name">${m.name}</div>
-        <div class="map-item-count">${m.blocks.length} bloques</div>
+        <div class="map-item-count">
+          ${m.blocks.length} bloques
+          <span class="map-status-summary">
+            ${freshCount > 0 ? `<span style="color:#10b981;">${freshCount}</span>` : ''}
+            ${warnCount > 0 ? `<span style="color:#f59e0b;">${warnCount}</span>` : ''}
+            ${alertCount > 0 ? `<span style="color:#ef4444;">${alertCount}</span>` : ''}
+          </span>
+        </div>
       </div>
       <button class="map-delete-btn" data-map-delete="${m.id}" title="Eliminar mapa">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
@@ -3068,8 +3157,9 @@ function renderBlockList() {
       item.dataset.localId = key.localId;
       item.dataset.name = block.name.toLowerCase();
       item.dataset.searchText = `${mapData.name} ${block.name}`.toLowerCase();
+      const visitInfo = getVisitStatusInfo(block.name);
       item.innerHTML = `
-        <div class="block-color-pip" style="background:${mapData.color.solid}"></div>
+        <div class="block-color-pip" style="background:${visitInfo.colors.css}"></div>
         <span class="num">${String(idx+1).padStart(2,'0')}</span>
         <span class="name">${block.name}</span>
         <span class="arrow">›</span>
@@ -3150,8 +3240,9 @@ function selectBlock(key) {
       const prevFound = findBlockByKey(selectedBlockKey);
       const polyEl = prevPoly.getElement();
       if (polyEl && prevFound) {
-        polyEl.style.fill = prevFound.mapData.color.fill;
-        polyEl.style.stroke = prevFound.mapData.color.stroke;
+        const prevVisit = getVisitStatusInfo(prevFound.block.name);
+        polyEl.style.fill = prevVisit.colors.fill;
+        polyEl.style.stroke = prevVisit.colors.stroke;
         polyEl.classList.remove('active-poly');
       }
     }
@@ -3182,7 +3273,8 @@ function selectBlock(key) {
   if (polygon) {
     const polyEl = polygon.getElement();
     if (polyEl) {
-      polyEl.style.fill = mapData.color.fill;
+      const visitStatus = getVisitStatusInfo(block.name);
+      polyEl.style.fill = visitStatus.colors.fill;
       polyEl.style.stroke = '#ffffff';
       polyEl.classList.add('active-poly');
     }
@@ -3232,31 +3324,30 @@ function selectBlock(key) {
   });
 
   $dName.textContent = block.name;
-  const record = getRecordForBlock(block.name);
-  let recordHtml = '';
-  if (record) {
-    const dStr = record.fecha_fin || record.fecha_inicio || '';
-    if (dStr) {
-      const d = new Date(dStr);
-      if (!isNaN(d.getTime())) {
-        const displayDate = d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
-        recordHtml = `
-          <div class="detail-row">
-            <span class="detail-key" style="color:var(--success);">Ultimo registro</span>
-            <span class="detail-val" style="color:var(--success);font-weight:600;">${displayDate}</span>
-          </div>`;
-      }
-    }
-  }
-  $dRows.innerHTML = `
+  const visitDetail = getVisitStatusInfo(block.name);
+  let recordHtml = `
     <div class="detail-map-badge" style="color:${mapData.color.solid}; border: 1px solid ${mapData.color.solid}33; background: ${mapData.color.solid}15;">
       <div class="map-color-dot" style="background:${mapData.color.solid}; width:7px; height:7px;"></div>
       ${mapData.name}
     </div>
-    ${recordHtml}
-    ${!recordHtml && !recordsLoaded ? '<span class="detail-empty" style="font-style:normal;color:var(--gold);">Conectando con Google Sheets...</span>' : ''}
-    ${!recordHtml && recordsLoaded ? '<span class="detail-empty">Sin registros en Google Sheets</span>' : ''}
-  `;
+    <div class="detail-map-badge" style="color:${visitDetail.colors.css}; border: 1px solid ${visitDetail.colors.css}33; background: ${visitDetail.colors.css}15; margin-bottom:0.5rem;">
+      <div class="map-color-dot" style="background:${visitDetail.colors.css}; width:7px; height:7px;"></div>
+      ${visitDetail.colors.label}
+    </div>`;
+  if (visitDetail.lastDate) {
+    const displayDate = visitDetail.lastDate.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
+    recordHtml += `
+      <div class="detail-row">
+        <span class="detail-key" style="color:${visitDetail.colors.css};">Ultima visita</span>
+        <span class="detail-val" style="color:${visitDetail.colors.css};font-weight:600;">${displayDate}</span>
+      </div>`;
+  } else {
+    recordHtml += `<span class="detail-empty" style="color:${visitDetail.colors.css};">Sin visita registrada</span>`;
+  }
+  if (!visitDetail.lastDate && !recordsLoaded) {
+    recordHtml += '<span class="detail-empty" style="font-style:normal;color:var(--gold);">Conectando con Google Sheets...</span>';
+  }
+  $dRows.innerHTML = recordHtml;
 
   $dForm.style.display = 'flex';
   gsap.fromTo($dForm, {
@@ -3412,6 +3503,16 @@ function saveToSheet() {
     })
     .catch(() => {
       queueRecord(payload);
+      sheetRecords.push({
+        publicador: publisher,
+        territorio: block.name,
+        mapName: mapData.name,
+        fecha_inicio: dateStart || '',
+        fecha_fin: dateEnd || ''
+      });
+      buildRecordsMap();
+      renderAllPolygons();
+      renderBlockList();
       statusEl.className = 'save-status success';
       statusEl.textContent = 'Guardado offline. Se sincronizará al conectar.';
       updatePendingBadge();
