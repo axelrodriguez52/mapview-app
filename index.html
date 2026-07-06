@@ -403,7 +403,7 @@
   /* Polygons */
   .custom-poly {
     cursor: pointer;
-    transition: all 0.3s var(--ease-apple);
+    transition: stroke-width 0.3s var(--ease-apple), filter 0.3s var(--ease-apple);
   }
   .custom-poly:hover {
     stroke-width: 2.5;
@@ -412,7 +412,7 @@
   .custom-poly.active-poly {
     stroke-width: 3;
     filter: drop-shadow(0 0 16px rgba(96,165,250,0.7));
-    transition: all 0.4s var(--ease-apple);
+    transition: stroke-width 0.4s var(--ease-apple), filter 0.4s var(--ease-apple);
   }
 
   /* Satellite mode enhanced highlight */
@@ -3009,6 +3009,16 @@ function renderAllPolygons() {
         color: vc.stroke,
         weight: 1.5
       });
+      polygon.setStyle({ fillColor: vc.fill, fillOpacity: 0.28, color: vc.stroke, weight: 1.5 });
+      requestAnimationFrame(() => {
+        const el = polygon.getElement();
+        if (el) {
+          el.style.fill = vc.fill;
+          el.style.stroke = vc.stroke;
+          el.style.strokeWidth = '1.5';
+          el.style.fillOpacity = '0.28';
+        }
+      });
       const blockName = block.name;
       const mapName = mapData.name;
       polygon.bindTooltip(function() {
@@ -4277,9 +4287,16 @@ gsap.to('.status-dot', {
 </script>
 <script>
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('sw.js').then(reg => {
+  navigator.serviceWorker.register('sw.js?v=8').then(reg => {
     reg.update().catch(() => {});
   }).catch(() => {});
+  navigator.serviceWorker.ready.then(() => {
+    if ('caches' in window) {
+      caches.keys().then(names => {
+        names.filter(n => !n.startsWith('mapview-v8')).forEach(n => caches.delete(n));
+      });
+    }
+  });
 }
 </script>
 </body>
