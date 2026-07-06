@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'mapview-v6';
+const CACHE_VERSION = 'mapview-v8';
 const CACHE_STATIC = `${CACHE_VERSION}-static`;
 const CACHE_CDN = `${CACHE_VERSION}-cdn`;
 const CACHE_FONTS = `${CACHE_VERSION}-fonts`;
@@ -90,6 +90,21 @@ self.addEventListener('fetch', e => {
     return;
   }
 
+  // HTML navigation -> network first, cache fallback (ensures latest code is always served)
+  if (request.mode === 'navigate' || request.destination === 'document' ||
+      url.pathname.endsWith('.html') || url.pathname === './' || url.pathname === '/') {
+    e.respondWith(
+      fetch(request).then(res => {
+        if (res.ok) {
+          const clone = res.clone();
+          caches.open(CACHE_STATIC).then(c => c.put(request, clone));
+        }
+        return res;
+      }).catch(() => caches.match(request).catch(() => caches.match('./index.html')))
+    );
+    return;
+  }
+
   // Static assets -> cache first, network fallback
   e.respondWith(
     caches.match(request).then(cached => {
@@ -101,10 +116,6 @@ self.addEventListener('fetch', e => {
         }
         return res;
       });
-    }).catch(() => {
-      if (request.mode === 'navigate') {
-        return caches.match('./index.html');
-      }
-    })
+    }).catch(() => caches.match(request))
   );
 });

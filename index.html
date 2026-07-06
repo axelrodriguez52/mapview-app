@@ -2469,6 +2469,7 @@ function fetchRecords() {
       console.log(`[MapView] Registros cargados de Sheets: ${sheetRecords.length}`, recordsMap);
       if (loadedMaps.length > 0) {
         renderAllPolygons();
+        renderMapList();
         renderBlockList();
       }
     })
@@ -2949,7 +2950,9 @@ function addMap(fileName, kmlBlocks) {
   };
   loadedMaps.push(mapData);
   activeMapFilter = mapData.id;
-  renderAll();
+  recordsReady.then(() => {
+    renderAll();
+  });
   return mapData;
 }
 
@@ -2957,14 +2960,14 @@ function removeMap(mapId) {
   loadedMaps = loadedMaps.filter(m => m.id !== mapId);
   if (activeMapFilter === mapId) activeMapFilter = loadedMaps.length > 0 ? loadedMaps[0].id : null;
   if (selectedBlockKey && selectedBlockKey.mapId === mapId) deselectBlock();
-  renderAll();
+  recordsReady.then(() => renderAll());
 }
 
 function toggleMapVisibility(mapId) {
   const m = loadedMaps.find(m => m.id === mapId);
   if (m) {
     m.visible = !m.visible;
-    renderAll();
+    recordsReady.then(() => renderAll());
   }
 }
 
@@ -2996,6 +2999,8 @@ function renderAllPolygons() {
     mapData.blocks.forEach(block => {
       const visitInfo = getVisitStatusInfo(block.name);
       const vc = visitInfo.colors;
+
+      console.log(`[MapView] Polygon "${block.name}": status=${visitInfo.status}, stroke=${vc.stroke}, fill=${vc.fill}`);
 
       const polygon = L.polygon(block.latlngs, {
         className: 'custom-poly',
@@ -4033,7 +4038,9 @@ function loadSelectedMap(index) {
   activeMapFilter = mapData.id;
 
   $btnCambiarMapa.style.display = 'flex';
-  renderAll();
+  recordsReady.then(() => {
+    renderAll();
+  });
   saveKmlToStorage();
   showWorkflowToast('Haz clic en un polígono del mapa o en la lista para ver sus datos', '👆', 4000);
 }
@@ -4143,7 +4150,7 @@ function showWorkflowToast(text, icon, duration) {
 
 // ── INTRO ──
 fetchAdminPassword();
-fetchRecords();
+const recordsReady = fetchRecords();
 loadKmlFromStorage();
 
 function showApp() {
@@ -4151,11 +4158,13 @@ function showApp() {
   document.getElementById('app').style.opacity = '1';
   map.invalidateSize();
 
-  if (allKmlData.length > 0) {
-    openMapSelector();
-  } else {
-    updateStats();
-  }
+  recordsReady.then(() => {
+    if (allKmlData.length > 0) {
+      openMapSelector();
+    } else {
+      updateStats();
+    }
+  });
 }
 
 fetchKmlsFromSheet().then(ok => {
@@ -4219,6 +4228,13 @@ window.addEventListener('offline', () => {
   document.getElementById('offline-badge').style.display = 'inline-flex';
   document.getElementById('status-dot').style.display = 'none';
   showWorkflowToast('Sin conexion. Los datos se guardan localmente.', '📡', 4000);
+});
+
+recordsReady.then(() => {
+  if (loadedMaps.length > 0) {
+    renderAllPolygons();
+    renderBlockList();
+  }
 });
 
 if (!navigator.onLine) {
