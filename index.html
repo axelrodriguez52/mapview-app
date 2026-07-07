@@ -3021,6 +3021,7 @@ function renderAllPolygons() {
         color: vc.stroke,
         weight: 1.5
       });
+      polygon._visitStatus = visitInfo.status;
       polygon.setStyle({ fillColor: vc.fill, fillOpacity: 0.28, color: vc.stroke, weight: 1.5 });
       requestAnimationFrame(() => {
         const el = polygon.getElement();
@@ -3068,6 +3069,57 @@ function renderAllPolygons() {
 
   layers.forEach(l => l.addTo(polygonLayerGroup));
 }
+
+function updatePolygonColors() {
+  let changed = false;
+  for (const refKey in polygonRefs) {
+    const polygon = polygonRefs[refKey];
+    if (!polygon) continue;
+    const dashIdx = refKey.indexOf('-');
+    const mapId = Number(refKey.substring(0, dashIdx));
+    const localId = Number(refKey.substring(dashIdx + 1));
+    const mapData = loadedMaps.find(m => m.id === mapId);
+    if (!mapData) continue;
+    const block = mapData.blocks.find(b => b.localId === localId);
+    if (!block) continue;
+
+    const visitInfo = getVisitStatusInfo(block.name);
+    const vc = visitInfo.colors;
+    const prev = polygon._visitStatus;
+    if (prev === visitInfo.status) continue;
+    changed = true;
+
+    polygon._visitStatus = visitInfo.status;
+    polygon.setStyle({ fillColor: vc.fill, fillOpacity: 0.28, color: vc.stroke, weight: 1.5 });
+    const el = polygon.getElement();
+    if (el) {
+      el.style.fill = vc.fill;
+      el.style.stroke = vc.stroke;
+    }
+    const blockName = block.name;
+    const mapName = mapData.name;
+    polygon.setTooltipContent(function() {
+      let content = `<div style="font-weight:600;margin-bottom:2px;">${blockName}</div>`;
+      content += `<div style="font-size:0.6rem;opacity:0.7;">${mapName}</div>`;
+      const statusDot = `<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${vc.css};margin-right:4px;vertical-align:middle;"></span>`;
+      content += `<div style="margin-top:3px;padding-top:3px;border-top:1px solid rgba(255,255,255,0.15);font-size:0.58rem;color:${vc.css};">${statusDot}${vc.label}</div>`;
+      if (visitInfo.lastDate) {
+        const displayDate = visitInfo.lastDate.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
+        content += `<div style="font-size:0.55rem;opacity:0.6;margin-top:1px;">Ultima visita: ${displayDate}</div>`;
+      } else {
+        content += `<div style="font-size:0.55rem;opacity:0.6;margin-top:1px;">Sin registro de visita</div>`;
+      }
+      return content;
+    });
+  }
+  if (changed) {
+    renderBlockList();
+    renderMapList();
+    updateStats();
+  }
+}
+
+setInterval(updatePolygonColors, 60000);
 
 function renderMapList() {
   const list = $mapList;
