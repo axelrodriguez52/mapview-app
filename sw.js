@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'mapview-v8';
+const CACHE_VERSION = 'mapview-v9';
 const CACHE_STATIC = `${CACHE_VERSION}-static`;
 const CACHE_CDN = `${CACHE_VERSION}-cdn`;
 const CACHE_FONTS = `${CACHE_VERSION}-fonts`;
