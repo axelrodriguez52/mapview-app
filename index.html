@@ -4003,6 +4003,7 @@ $fileUpload.addEventListener('change', (e) => {
 // ── MAP SELECTOR ──
 function openMapSelector() {
   $selectorGrid.innerHTML = '';
+  $mapEmptyState.classList.add('hidden');
 
   allKmlData.forEach((kml, i) => {
     const color = MAP_COLORS[i % MAP_COLORS.length];
@@ -4092,6 +4093,9 @@ function loadSelectedMap(index) {
 
 function closeMapSelector() {
   $mapSelector.classList.remove('active');
+  if (loadedMaps.length === 0 && allKmlData.length === 0) {
+    $mapEmptyState.classList.remove('hidden');
+  }
 }
 
 // ── SIDEBAR TOGGLE (MOBILE) ──
