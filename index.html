@@ -961,6 +961,51 @@
   }
   .edit-mode-cancel:hover { opacity: 0.8; }
 
+  .detail-edit-section {
+    margin-top: 0.5rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--border);
+  }
+  .detail-edit-single {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+  .detail-edit-info {
+    font-size: 0.68rem;
+    color: var(--muted);
+  }
+  .detail-edit-info strong { color: var(--text); }
+  .detail-edit-btn {
+    flex-shrink: 0;
+    padding: 0.28rem 0.55rem;
+    border: 1px solid var(--accent);
+    border-radius: 4px;
+    background: transparent;
+    color: var(--accent);
+    font-size: 0.62rem;
+    font-weight: 600;
+    font-family: 'Inter', sans-serif;
+    cursor: pointer;
+    transition: opacity 0.2s;
+  }
+  .detail-edit-btn:hover { opacity: 0.8; }
+  .detail-edit-multi {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+  .detail-edit-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+  }
+  .detail-edit-option {
+    text-align: left;
+    width: 100%;
+  }
+
   .save-status {
     font-size: 0.7rem;
     text-align: center;
@@ -2515,6 +2560,19 @@ function getRecordForBlock(blockName) {
   return recordsMap[blockName.toLowerCase().trim()] || null;
 }
 
+function getEditableRecords(blockName) {
+  const now = new Date();
+  const curMonth = now.getMonth();
+  const curYear = now.getFullYear();
+  return sheetRecords.filter(r => {
+    if (!r.territorio || r.territorio.toLowerCase().trim() !== blockName.toLowerCase().trim()) return false;
+    const ts = parseDateValue(r.fecha_fin || r.fecha_inicio || '');
+    if (!ts) return false;
+    const d = new Date(ts);
+    return d.getFullYear() === curYear && d.getMonth() === curMonth;
+  });
+}
+
 // ── VISIT STATUS COLORS ──
 const STATUS_COLORS = {
   fresh:  { fill: 'rgba(16,185,129,0.28)', stroke: '#10b981', label: 'Reciente', css: '#10b981' },
@@ -3422,6 +3480,35 @@ function selectBlock(key) {
   if (!visitDetail.lastDate && !recordsLoaded) {
     recordHtml += '<span class="detail-empty" style="font-style:normal;color:var(--gold);">Conectando con Google Sheets...</span>';
   }
+
+  const editableRecords = getEditableRecords(block.name);
+  if (editableRecords.length > 0) {
+    recordHtml += `<div class="detail-edit-section">`;
+    if (editableRecords.length === 1) {
+      const rec = editableRecords[0];
+      const pub = rec.publicador || 'Sin publicador';
+      const f = rec.fecha_inicio || rec.fecha_fin || '';
+      recordHtml += `
+        <div class="detail-edit-single">
+          <span class="detail-edit-info">Registro del mes: <strong>${pub}</strong>${f ? ' — ' + f : ''}</span>
+          <button class="detail-edit-btn" onclick="startEditRecord('${rec.publicador || ''}', '${rec.fecha_inicio || ''}', '${rec.fecha_fin || ''}')">
+            Editar
+          </button>
+        </div>`;
+    } else {
+      recordHtml += `<div class="detail-edit-multi"><span class="detail-edit-info">Varios registros este mes (${editableRecords.length}):</span><div class="detail-edit-list">`;
+      editableRecords.forEach((rec, idx) => {
+        const pub = rec.publicador || 'Sin publicador';
+        const f = rec.fecha_inicio || rec.fecha_fin || '';
+        recordHtml += `
+          <button class="detail-edit-btn detail-edit-option" onclick="startEditRecord('${rec.publicador || ''}', '${rec.fecha_inicio || ''}', '${rec.fecha_fin || ''}')">
+            ${pub}${f ? ' — ' + f : ''}
+          </button>`;
+      });
+      recordHtml += `</div></div>`;
+    }
+    recordHtml += `</div>`;
+  }
   $dRows.innerHTML = recordHtml;
 
   $dForm.style.display = 'flex';
@@ -3434,42 +3521,19 @@ function selectBlock(key) {
     duration: 0.45,
     ease: 'back.out(1.3)'
   });
-  const existingRecord = getRecordForBlock(block.name);
-  if (existingRecord) {
-    editingRecord = existingRecord;
-    $dPublisher.value = existingRecord.publicador || '';
-    $dDateStart.value = existingRecord.fecha_inicio || '';
-    $dDateEnd.value = existingRecord.fecha_fin || '';
-    $dBtnSave.innerHTML = `
-      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M13 2H3a1 1 0 00-1 1v10a1 1 0 001 1h10a1 1 0 001-1V3a1 1 0 00-1-1z"/>
-        <path d="M5 8l2 2 4-4"/>
-      </svg>
-      Actualizar registro`;
-    $dBtnSave.onclick = updateRecord;
-    const existingLabel = $dForm.querySelector('.edit-mode-label');
-    if (!existingLabel) {
-      const lbl = document.createElement('div');
-      lbl.className = 'edit-mode-label';
-      lbl.innerHTML = '<span>Editando registro existente</span><button type="button" class="edit-mode-cancel">Nuevo registro</button>';
-      $dForm.querySelector('.registration-section').prepend(lbl);
-      lbl.querySelector('.edit-mode-cancel').addEventListener('click', exitEditMode);
-    }
-  } else {
-    editingRecord = null;
-    $dPublisher.value = '';
-    $dDateStart.value = '';
-    $dDateEnd.value = '';
-    $dBtnSave.innerHTML = `
-      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M13 2H3a1 1 0 00-1 1v10a1 1 0 001 1h10a1 1 0 001-1V3a1 1 0 00-1-1z"/>
-        <path d="M5 8l2 2 4-4"/>
-      </svg>
-      Grabar en Google Sheets`;
-    $dBtnSave.onclick = saveToSheet;
-    const existingLabel = $dForm.querySelector('.edit-mode-label');
-    if (existingLabel) existingLabel.remove();
-  }
+  const existingLabel = $dForm.querySelector('.edit-mode-label');
+  if (existingLabel) existingLabel.remove();
+  editingRecord = null;
+  $dPublisher.value = '';
+  $dDateStart.value = '';
+  $dDateEnd.value = '';
+  $dBtnSave.innerHTML = `
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M13 2H3a1 1 0 00-1 1v10a1 1 0 001 1h10a1 1 0 001-1V3a1 1 0 00-1-1z"/>
+      <path d="M5 8l2 2 4-4"/>
+    </svg>
+    Grabar en Google Sheets`;
+  $dBtnSave.onclick = saveToSheet;
   $dSaveStatus.className = 'save-status';
   $dSaveStatus.textContent = '';
 }
@@ -3708,6 +3772,37 @@ function updateRecord() {
         </svg>
         Actualizar registro`;
     });
+}
+
+function startEditRecord(publisher, fechaInicio, fechaFin) {
+  editingRecord = { publicador: publisher, fecha_inicio: fechaInicio, fecha_fin: fechaFin };
+  $dPublisher.value = publisher || '';
+  $dDateStart.value = fechaInicio || '';
+  $dDateEnd.value = fechaFin || '';
+  $dBtnSave.innerHTML = `
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M13 2H3a1 1 0 00-1 1v10a1 1 0 001 1h10a1 1 0 001-1V3a1 1 0 00-1-1z"/>
+      <path d="M5 8l2 2 4-4"/>
+    </svg>
+    Actualizar registro`;
+  $dBtnSave.onclick = updateRecord;
+
+  const existingLabel = $dForm.querySelector('.edit-mode-label');
+  if (!existingLabel) {
+    const lbl = document.createElement('div');
+    lbl.className = 'edit-mode-label';
+    lbl.innerHTML = '<span>Editando registro del mes</span><button type="button" class="edit-mode-cancel">Cancelar</button>';
+    $dForm.querySelector('.registration-section').prepend(lbl);
+    lbl.querySelector('.edit-mode-cancel').addEventListener('click', exitEditMode);
+  }
+
+  if (isMobile() || isTablet()) {
+    setTimeout(() => {
+      $dForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 200);
+  }
+
+  gsap.fromTo($dForm, { scale: 0.98 }, { scale: 1, duration: 0.3, ease: 'back.out(1.5)' });
 }
 
 function exitEditMode() {
