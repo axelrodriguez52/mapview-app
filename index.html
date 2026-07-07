@@ -3250,7 +3250,7 @@ function updateStats() {
   $mapCount.textContent = loadedMaps.length;
   $totalCount.textContent = totalBlocks;
 
-  if (loadedMaps.length > 0) {
+  if (loadedMaps.length > 0 || allKmlData.length > 0) {
     $mapEmptyState.classList.add('hidden');
   } else {
     $mapEmptyState.classList.remove('hidden');
