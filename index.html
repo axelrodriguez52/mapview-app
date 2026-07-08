@@ -2291,6 +2291,7 @@ let allKmlData = [];
 let nextMapId = 0;
 let activeMapFilter = null;
 let selectedBlockKey = null;
+let mobileZoomOnly = false;
 let editingRecord = null;
 
 let map, polygonLayerGroup;
@@ -3101,6 +3102,49 @@ function renderAllPolygons() {
       polygon.on('click', () => {
         const key = { mapId: mapData.id, localId: block.localId };
         const isSame = selectedBlockKey && selectedBlockKey.mapId === key.mapId && selectedBlockKey.localId === key.localId;
+
+        if (isMobile() || isTablet()) {
+          if (isSame && mobileZoomOnly) {
+            mobileZoomOnly = false;
+            selectBlock(key);
+            return;
+          }
+          if (isSame) {
+            selectBlock(null);
+            mobileZoomOnly = false;
+            return;
+          }
+
+          if (selectedBlockKey) {
+            const prevPoly = getPolygonRef(selectedBlockKey);
+            if (prevPoly) {
+              const prevFound = findBlockByKey(selectedBlockKey);
+              const polyEl = prevPoly.getElement();
+              if (polyEl && prevFound) {
+                const prevVisit = getVisitStatusInfo(prevFound.block.name);
+                polyEl.style.fill = prevVisit.colors.fill;
+                polyEl.style.stroke = prevVisit.colors.stroke;
+                polyEl.classList.remove('active-poly');
+              }
+            }
+          }
+
+          selectedBlockKey = key;
+          mobileZoomOnly = true;
+          const polyEl = polygon.getElement();
+          if (polyEl) {
+            const visitStatus = getVisitStatusInfo(block.name);
+            polyEl.style.fill = visitStatus.colors.fill;
+            polyEl.style.stroke = '#ffffff';
+            polyEl.classList.add('active-poly');
+          }
+          map.fitBounds(polygon.getBounds(), { padding: [80, 80], maxZoom: 19, animate: true, duration: 0.9, easeLinearity: 0.25 });
+          autoCloseSidebar();
+          const blockItem = document.querySelector(`.block-item[data-map-id="${key.mapId}"][data-local-id="${key.localId}"]`);
+          if (blockItem) blockItem.classList.add('active');
+          return;
+        }
+
         selectBlock(isSame ? null : key);
       });
       layers.push(polygon);
@@ -3362,6 +3406,7 @@ function findBlockByKey(key) {
 }
 
 function selectBlock(key) {
+  mobileZoomOnly = false;
   const hud = $hudSelection;
 
   if (selectedBlockKey) {
