@@ -3139,7 +3139,6 @@ function renderAllPolygons() {
             polyEl.classList.add('active-poly');
           }
           map.fitBounds(polygon.getBounds(), { padding: [80, 80], maxZoom: 19, animate: true, duration: 0.9, easeLinearity: 0.25 });
-          autoCloseSidebar();
           const blockItem = document.querySelector(`.block-item[data-map-id="${key.mapId}"][data-local-id="${key.localId}"]`);
           if (blockItem) blockItem.classList.add('active');
           return;
