@@ -386,6 +386,15 @@
     color: #facc15;
   }
 
+  /* Dark standard tiles: darken OSM tiles in dark mode when not satellite */
+  [data-theme="dark"] .leaflet-tile-pane img {
+    filter: invert(1) hue-rotate(180deg) brightness(0.7) contrast(0.85) saturate(0.6);
+    transition: filter 0.3s;
+  }
+  #map-container.satellite-active .leaflet-tile-pane img {
+    filter: none;
+  }
+
   /* Polygons */
   .custom-poly {
     cursor: pointer;
@@ -2769,11 +2778,13 @@ function debounce(fn, ms) {
 }
 
 // ── MAP INIT ──
-const vistaEstandarDark = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-  attribution: '&copy; OpenStreetMap &copy; CARTO'
+const vistaEstandarDark = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '&copy; OpenStreetMap',
+  maxZoom: 19
 });
-const vistaEstandarLight = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-  attribution: '&copy; OpenStreetMap &copy; CARTO'
+const vistaEstandarLight = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '&copy; OpenStreetMap',
+  maxZoom: 19
 });
 const vistaSatelital = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
   attribution: 'Tiles &copy; Esri'
