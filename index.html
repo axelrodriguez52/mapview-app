@@ -2536,7 +2536,7 @@ function fetchRecords() {
 function buildRecordsMap() {
   recordsMap = {};
   sheetRecords.forEach(r => {
-    const key = r.territorio ? r.territorio.toLowerCase().trim() : '';
+    const key = r.territorio ? normalizeTerritoryName(r.territorio) : '';
     if (!key) return;
     if (!recordsMap[key]) {
       recordsMap[key] = r;
@@ -2566,16 +2566,21 @@ function parseDateValue(str) {
   return 0;
 }
 
+function normalizeTerritoryName(name) {
+  return name.replace(/\s*\(\d+\)\s*$/, '').toLowerCase().trim();
+}
+
 function getRecordForBlock(blockName) {
-  return recordsMap[blockName.toLowerCase().trim()] || null;
+  return recordsMap[normalizeTerritoryName(blockName)] || null;
 }
 
 function getEditableRecords(blockName) {
   const now = new Date();
   const curMonth = now.getMonth();
   const curYear = now.getFullYear();
+  const target = normalizeTerritoryName(blockName);
   return sheetRecords.filter(r => {
-    if (!r.territorio || r.territorio.toLowerCase().trim() !== blockName.toLowerCase().trim()) return false;
+    if (!r.territorio || normalizeTerritoryName(r.territorio) !== target) return false;
     const ts = parseDateValue(r.fecha_fin || r.fecha_inicio || '');
     if (!ts) return false;
     const d = new Date(ts);
@@ -3691,7 +3696,7 @@ function saveToSheet() {
   const payload = {
     action: 'addRecord',
     publicador: publisher,
-    territorio: block.name,
+    territorio: block.name.replace(/\s*\(\d+\)\s*$/, ''),
     mapName: mapData.name,
     fechaInicio: dateStart || '',
     fechaFin: dateEnd || ''
@@ -3729,7 +3734,7 @@ function saveToSheet() {
       queueRecord(payload);
       sheetRecords.push({
         publicador: publisher,
-        territorio: block.name,
+        territorio: block.name.replace(/\s*\(\d+\)\s*$/, ''),
         mapName: mapData.name,
         fecha_inicio: dateStart || '',
         fecha_fin: dateEnd || ''
@@ -3779,7 +3784,7 @@ function updateRecord() {
   const payload = {
     action: 'updateRecord',
     publicador: publisher,
-    territorio: block.name,
+    territorio: block.name.replace(/\s*\(\d+\)\s*$/, ''),
     mapName: mapData.name,
     fechaInicio: dateStart || '',
     fechaFin: dateEnd || ''
