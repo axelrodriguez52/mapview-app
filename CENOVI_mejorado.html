@@ -2284,14 +2284,6 @@
               </svg>
               Grabar en Google Sheets
             </button>
-            <button class="btn-grabar admin-only" id="d-btn-delete" style="display:none;background:rgba(239,68,68,0.15);border:1px solid #ef4444;color:#ef4444;margin-top:0.4rem;" onclick="deleteRecord()">
-              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M3 4h10M6 4V3a1 1 0 011-1h2a1 1 0 011 1v1M5 4v9a1 1 0 001 1h4a1 1 0 001-1V4"/>
-                <line x1="7" y1="7" x2="7" y2="11"/>
-                <line x1="9" y1="7" x2="9" y2="11"/>
-              </svg>
-              Borrar registros de este territorio
-            </button>
           </div>
         </div>
       </div>
@@ -3627,9 +3619,14 @@ function selectBlock(key) {
       recordHtml += `
         <div class="detail-edit-single">
           <span class="detail-edit-info">Registro del mes: <strong>${pub}</strong>${f ? ' — ' + f : ''}</span>
-          <button class="detail-edit-btn" onclick="startEditRecord('${rec.publicador || ''}', '${rec.fecha_inicio || ''}', '${rec.fecha_fin || ''}')">
-            Editar
-          </button>
+          <div style="display:flex;gap:4px;">
+            <button class="detail-edit-btn" onclick="startEditRecord('${rec.publicador || ''}', '${rec.fecha_inicio || ''}', '${rec.fecha_fin || ''}')">
+              Editar
+            </button>
+            <button class="detail-edit-btn admin-only" style="background:rgba(239,68,68,0.15);border:1px solid #ef4444;color:#ef4444;" onclick="deleteSingleRecord('${(rec.publicador || '').replace(/'/g, "\\'")}', '${(rec.fecha_inicio || '').replace(/'/g, "\\'")}', '${(rec.fecha_fin || '').replace(/'/g, "\\'")}', '${(rec.territorio || '').replace(/'/g, "\\'")}')">
+              Borrar
+            </button>
+          </div>
         </div>`;
     } else {
       recordHtml += `<div class="detail-edit-multi"><span class="detail-edit-info">Varios registros este mes (${editableRecords.length}):</span><div class="detail-edit-list">`;
@@ -3637,9 +3634,14 @@ function selectBlock(key) {
         const pub = rec.publicador || 'Sin publicador';
         const f = rec.fecha_inicio || rec.fecha_fin || '';
         recordHtml += `
-          <button class="detail-edit-btn detail-edit-option" onclick="startEditRecord('${rec.publicador || ''}', '${rec.fecha_inicio || ''}', '${rec.fecha_fin || ''}')">
-            ${pub}${f ? ' — ' + f : ''}
-          </button>`;
+          <div style="display:flex;gap:4px;align-items:center;">
+            <button class="detail-edit-btn detail-edit-option" onclick="startEditRecord('${(rec.publicador || '').replace(/'/g, "\\'")}', '${(rec.fecha_inicio || '').replace(/'/g, "\\'")}', '${(rec.fecha_fin || '').replace(/'/g, "\\'")}')">
+              ${pub}${f ? ' — ' + f : ''}
+            </button>
+            <button class="detail-edit-btn admin-only" style="background:rgba(239,68,68,0.15);border:1px solid #ef4444;color:#ef4444;padding:2px 6px;font-size:0.6rem;" onclick="deleteSingleRecord('${(rec.publicador || '').replace(/'/g, "\\'")}', '${(rec.fecha_inicio || '').replace(/'/g, "\\'")}', '${(rec.fecha_fin || '').replace(/'/g, "\\'")}', '${(rec.territorio || '').replace(/'/g, "\\'")}')">
+              ✕
+            </button>
+          </div>`;
       });
       recordHtml += `</div></div>`;
     }
@@ -3959,43 +3961,45 @@ function exitEditMode() {
   $dSaveStatus.textContent = '';
 }
 
-function deleteRecord() {
-  if (!selectedBlockKey) return;
-  const found = findBlockByKey(selectedBlockKey);
-  if (!found) return;
-  const { block } = found;
-
-  if (!confirm(`¿Borrar todos los registros del territorio "${block.name}"?\n\nEsto eliminará los datos de Google Sheets y podrás registrar nuevamente.`)) return;
+function deleteSingleRecord(publicador, fechaInicio, fechaFin, territorio) {
+  if (!confirm(`¿Borrar este registro de "${territorio}"?\n\nPublicador: ${publicador}\nEste registro se eliminará de Google Sheets.`)) return;
 
   const statusEl = $dSaveStatus;
-  const btn = document.getElementById('d-btn-delete');
-  btn.disabled = true;
   statusEl.className = 'save-status';
   statusEl.textContent = 'Borrando...';
 
-  const payload = JSON.stringify({ territorio: block.name.replace(/\s*\(\d+\)\s*$/, '') });
+  const payload = JSON.stringify({
+    action: 'deleteRecord',
+    publicador: publicador,
+    fechaInicio: fechaInicio,
+    fechaFin: fechaFin,
+    territorio: territorio
+  });
 
   fetch(`${GOOGLE_SHEETS_URL}?action=deleteRecord&d=${encodeURIComponent(payload)}`)
     .then(r => r.json())
     .then(data => {
       if (data.status === 'ok') {
-        sheetRecords = sheetRecords.filter(r2 => normalizeTerritoryName(r2.territorio || '') !== normalizeTerritoryName(block.name));
+        sheetRecords = sheetRecords.filter(r2 => {
+          if ((r2.territorio || '') !== territorio) return true;
+          if ((r2.publicador || '') !== publicador) return true;
+          if ((r2.fecha_inicio || '') !== fechaInicio) return true;
+          if ((r2.fecha_fin || '') !== fechaFin) return true;
+          return false;
+        });
         buildRecordsMap();
         renderAllPolygons();
         renderBlockList();
         statusEl.className = 'save-status success';
-        statusEl.textContent = `Registros borrados (${data.count}). Ya puedes registrar nuevamente.`;
-        showWorkflowToast('Registros borrados del territorio ✓', '🗑️', 3000);
+        statusEl.textContent = 'Registro borrado. Ya puedes registrar uno nuevo.';
+        showWorkflowToast('Registro borrado ✓', '🗑️', 3000);
       } else {
         throw new Error('Server error');
       }
     })
     .catch(() => {
       statusEl.className = 'save-status error';
-      statusEl.textContent = 'No se pudieron borrar los registros. Intenta de nuevo.';
-    })
-    .finally(() => {
-      btn.disabled = false;
+      statusEl.textContent = 'No se pudo borrar. Intenta de nuevo.';
     });
 }
 
@@ -4285,6 +4289,42 @@ function deleteRecord() {
  *          .setMimeType(ContentService.MimeType.JSON);
  *      }
  *
+ *      if (action === 'updateRecord') {
+ *        var ss = SpreadsheetApp.getActiveSpreadsheet();
+ *        var sheet = ss.getSheetByName('Registros');
+ *        if (!sheet) {
+ *          return ContentService
+ *            .createTextOutput(JSON.stringify({ status: 'ok', count: 0 }))
+ *            .setMimeType(ContentService.MimeType.JSON);
+ *        }
+ *
+ *        var payload = JSON.parse(e.parameter.d);
+ *        var allData = sheet.getDataRange().getValues();
+ *        var headers = allData[0];
+ *        var updated = 0;
+ *
+ *        for (var i = 1; i < allData.length; i++) {
+ *          var rowTerr = '';
+ *          for (var j = 3; j < headers.length; j++) {
+ *            if (allData[i][j] && allData[i][j].toString().trim() !== '') {
+ *              rowTerr = allData[i][j].toString().trim();
+ *              break;
+ *            }
+ *          }
+ *          if (rowTerr === payload.territorio) {
+ *            allData[i][0] = payload.publicador;
+ *            allData[i][1] = payload.fechaInicio;
+ *            allData[i][2] = payload.fechaFin;
+ *            sheet.getRange(i + 1, 1, 1, 3).setValues([[payload.publicador, payload.fechaInicio, payload.fechaFin]]);
+ *            updated++;
+ *          }
+ *        }
+ *
+ *        return ContentService
+ *          .createTextOutput(JSON.stringify({ status: 'ok', count: updated }))
+ *          .setMimeType(ContentService.MimeType.JSON);
+ *      }
+ *
  *      if (action === 'deleteRecord') {
  *        var ss = SpreadsheetApp.getActiveSpreadsheet();
  *        var sheet = ss.getSheetByName('Registros');
@@ -4295,27 +4335,34 @@ function deleteRecord() {
  *        }
  *
  *        var payload = JSON.parse(e.parameter.d);
- *        var target = payload.territorio.toLowerCase().trim();
  *        var allData = sheet.getDataRange().getValues();
  *        var headers = allData[0];
+ *        var rowCount = 0;
  *
- *        var rowsToDelete = [];
- *        for (var i = 1; i < allData.length; i++) {
+ *        for (var i = allData.length - 1; i >= 1; i--) {
+ *          var rowTerr = '';
  *          for (var j = 3; j < headers.length; j++) {
- *            var val = allData[i][j] ? allData[i][j].toString().toLowerCase().trim() : '';
- *            if (val === target || val.replace(/\s*\(\d+\)\s*$/, '') === target) {
- *              rowsToDelete.push(i + 1);
+ *            if (allData[i][j] && allData[i][j].toString().trim() !== '') {
+ *              rowTerr = allData[i][j].toString().trim();
  *              break;
  *            }
  *          }
- *        }
+ *          var rowPub = allData[i][0] ? allData[i][0].toString().trim() : '';
+ *          var rowFI = allData[i][1] ? allData[i][1].toString().trim() : '';
+ *          var rowFF = allData[i][2] ? allData[i][2].toString().trim() : '';
  *
- *        for (var k = rowsToDelete.length - 1; k >= 0; k--) {
- *          sheet.deleteRow(rowsToDelete[k]);
+ *          if (rowTerr === payload.territorio &&
+ *              rowPub === (payload.publicador || '') &&
+ *              rowFI === (payload.fechaInicio || '') &&
+ *              rowFF === (payload.fechaFin || '')) {
+ *            sheet.deleteRow(i + 1);
+ *            rowCount++;
+ *            break;
+ *          }
  *        }
  *
  *        return ContentService
- *          .createTextOutput(JSON.stringify({ status: 'ok', count: rowsToDelete.length }))
+ *          .createTextOutput(JSON.stringify({ status: 'ok', count: rowCount }))
  *          .setMimeType(ContentService.MimeType.JSON);
  *      }
  *
