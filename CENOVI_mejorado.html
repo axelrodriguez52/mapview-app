@@ -2633,6 +2633,8 @@ function getVisitStatusInfo(blockName) {
         }
       }
     }
+  } else {
+    visitIcon = 'alert';
   }
   return { status, colors: STATUS_COLORS[status], lastDate, visitIcon };
 }
@@ -3183,6 +3185,8 @@ function renderAllPolygons() {
         visitBadge = `<span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#10b981;color:#fff;font-size:0.55rem;font-weight:700;margin-right:3px;vertical-align:middle;" title="Con fecha de finalización">✓</span>`;
       } else if (visitInfo.visitIcon === 'question') {
         visitBadge = `<span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#f59e0b;color:#000;font-size:0.55rem;font-weight:700;margin-right:3px;vertical-align:middle;" title="Sin fecha de finalización">?</span>`;
+      } else if (visitInfo.visitIcon === 'alert') {
+        visitBadge = `<span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#ef4444;color:#fff;font-size:0.55rem;font-weight:700;margin-right:3px;vertical-align:middle;" title="Sin trabajar">!</span>`;
       }
       const labelIcon = L.divIcon({
         className: 'map-label',
@@ -3234,6 +3238,8 @@ function updatePolygonColors() {
         badge = `<span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#10b981;color:#fff;font-size:0.55rem;font-weight:700;margin-right:3px;vertical-align:middle;">✓</span>`;
       } else if (visitInfo.visitIcon === 'question') {
         badge = `<span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#f59e0b;color:#000;font-size:0.55rem;font-weight:700;margin-right:3px;vertical-align:middle;">?</span>`;
+      } else if (visitInfo.visitIcon === 'alert') {
+        badge = `<span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#ef4444;color:#fff;font-size:0.55rem;font-weight:700;margin-right:3px;vertical-align:middle;">!</span>`;
       }
       labelInfo.marker.setIcon(L.divIcon({
         className: 'map-label',
