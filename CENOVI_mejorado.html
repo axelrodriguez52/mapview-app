@@ -2306,6 +2306,7 @@ let editingRecord = null;
 let map, polygonLayerGroup;
 let allBlockItems = [];
 let polygonRefs = {};
+let labelRefs = {};
 let firstBlockSelected = false;
 
 // ── CACHED DOM REFS ──
@@ -2619,14 +2620,21 @@ function getVisitStatusInfo(blockName) {
   const status = getVisitStatus(blockName);
   const record = getRecordForBlock(blockName);
   let lastDate = null;
+  let visitIcon = null;
   if (record) {
     const dateStr = record.fecha_fin || record.fecha_inicio || '';
     if (dateStr) {
       const ts = parseDateValue(dateStr);
-      if (ts) lastDate = new Date(ts);
+      if (ts) {
+        lastDate = new Date(ts);
+        const diffDays = (Date.now() - ts) / (1000 * 60 * 60 * 24);
+        if (diffDays < 90) {
+          visitIcon = record.fecha_fin ? 'check' : 'question';
+        }
+      }
     }
   }
-  return { status, colors: STATUS_COLORS[status], lastDate };
+  return { status, colors: STATUS_COLORS[status], lastDate, visitIcon };
 }
 
 function saveKmlToStorage() {
@@ -3072,6 +3080,7 @@ function renderAll() {
 function renderAllPolygons() {
   polygonLayerGroup.clearLayers();
   polygonRefs = {};
+  labelRefs = {};
   const layers = [];
 
   loadedMaps.forEach(mapData => {
@@ -3090,6 +3099,7 @@ function renderAllPolygons() {
         weight: 1.5
       });
       polygon._visitStatus = visitInfo.status;
+      polygon._visitIcon = visitInfo.visitIcon;
       polygon.setStyle({ fillColor: vc.fill, fillOpacity: 0.28, color: vc.stroke, weight: 1.5 });
       requestAnimationFrame(() => {
         const el = polygon.getElement();
@@ -3168,12 +3178,20 @@ function renderAllPolygons() {
       polygonRefs[refKey] = polygon;
 
       const center = polygon.getBounds().getCenter();
+      let visitBadge = '';
+      if (visitInfo.visitIcon === 'check') {
+        visitBadge = `<span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#10b981;color:#fff;font-size:0.55rem;font-weight:700;margin-right:3px;vertical-align:middle;" title="Con fecha de finalización">✓</span>`;
+      } else if (visitInfo.visitIcon === 'question') {
+        visitBadge = `<span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#f59e0b;color:#000;font-size:0.55rem;font-weight:700;margin-right:3px;vertical-align:middle;" title="Sin fecha de finalización">?</span>`;
+      }
       const labelIcon = L.divIcon({
         className: 'map-label',
-        html: `<span style="color:${vc.stroke}">${block.name}</span>`,
+        html: `${visitBadge}<span style="color:${vc.stroke}">${block.name}</span>`,
         iconSize: [120, 20]
       });
-      layers.push(L.marker(center, { icon: labelIcon, interactive: false }));
+      const labelMarker = L.marker(center, { icon: labelIcon, interactive: false });
+      layers.push(labelMarker);
+      labelRefs[`${mapData.id}-${block.localId}`] = { marker: labelMarker, name: block.name, mapName: mapData.name, color: vc.stroke };
     });
   });
 
@@ -3196,15 +3214,32 @@ function updatePolygonColors() {
     const visitInfo = getVisitStatusInfo(block.name);
     const vc = visitInfo.colors;
     const prev = polygon._visitStatus;
-    if (prev === visitInfo.status) continue;
+    const prevIcon = polygon._visitIcon;
+    const iconChanged = prevIcon !== visitInfo.visitIcon;
+    if (prev === visitInfo.status && !iconChanged) continue;
     changed = true;
 
     polygon._visitStatus = visitInfo.status;
+    polygon._visitIcon = visitInfo.visitIcon;
     polygon.setStyle({ fillColor: vc.fill, fillOpacity: 0.28, color: vc.stroke, weight: 1.5 });
     const el = polygon.getElement();
     if (el) {
       el.style.fill = vc.fill;
       el.style.stroke = vc.stroke;
+    }
+    const labelInfo = labelRefs[refKey];
+    if (labelInfo) {
+      let badge = '';
+      if (visitInfo.visitIcon === 'check') {
+        badge = `<span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#10b981;color:#fff;font-size:0.55rem;font-weight:700;margin-right:3px;vertical-align:middle;">✓</span>`;
+      } else if (visitInfo.visitIcon === 'question') {
+        badge = `<span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#f59e0b;color:#000;font-size:0.55rem;font-weight:700;margin-right:3px;vertical-align:middle;">?</span>`;
+      }
+      labelInfo.marker.setIcon(L.divIcon({
+        className: 'map-label',
+        html: `${badge}<span style="color:${vc.stroke}">${block.name}</span>`,
+        iconSize: [120, 20]
+      }));
     }
     const blockName = block.name;
     const mapName = mapData.name;
