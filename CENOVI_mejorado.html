@@ -2284,6 +2284,14 @@
               </svg>
               Grabar en Google Sheets
             </button>
+            <button class="btn-grabar admin-only" id="d-btn-delete" style="display:none;background:rgba(239,68,68,0.15);border:1px solid #ef4444;color:#ef4444;margin-top:0.4rem;" onclick="deleteRecord()">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 4h10M6 4V3a1 1 0 011-1h2a1 1 0 011 1v1M5 4v9a1 1 0 001 1h4a1 1 0 001-1V4"/>
+                <line x1="7" y1="7" x2="7" y2="11"/>
+                <line x1="9" y1="7" x2="9" y2="11"/>
+              </svg>
+              Borrar registros de este territorio
+            </button>
           </div>
         </div>
       </div>
@@ -3951,6 +3959,46 @@ function exitEditMode() {
   $dSaveStatus.textContent = '';
 }
 
+function deleteRecord() {
+  if (!selectedBlockKey) return;
+  const found = findBlockByKey(selectedBlockKey);
+  if (!found) return;
+  const { block } = found;
+
+  if (!confirm(`¿Borrar todos los registros del territorio "${block.name}"?\n\nEsto eliminará los datos de Google Sheets y podrás registrar nuevamente.`)) return;
+
+  const statusEl = $dSaveStatus;
+  const btn = document.getElementById('d-btn-delete');
+  btn.disabled = true;
+  statusEl.className = 'save-status';
+  statusEl.textContent = 'Borrando...';
+
+  const payload = JSON.stringify({ territorio: block.name.replace(/\s*\(\d+\)\s*$/, '') });
+
+  fetch(`${GOOGLE_SHEETS_URL}?action=deleteRecord&d=${encodeURIComponent(payload)}`)
+    .then(r => r.json())
+    .then(data => {
+      if (data.status === 'ok') {
+        sheetRecords = sheetRecords.filter(r2 => normalizeTerritoryName(r2.territorio || '') !== normalizeTerritoryName(block.name));
+        buildRecordsMap();
+        renderAllPolygons();
+        renderBlockList();
+        statusEl.className = 'save-status success';
+        statusEl.textContent = `Registros borrados (${data.count}). Ya puedes registrar nuevamente.`;
+        showWorkflowToast('Registros borrados del territorio ✓', '🗑️', 3000);
+      } else {
+        throw new Error('Server error');
+      }
+    })
+    .catch(() => {
+      statusEl.className = 'save-status error';
+      statusEl.textContent = 'No se pudieron borrar los registros. Intenta de nuevo.';
+    })
+    .finally(() => {
+      btn.disabled = false;
+    });
+}
+
 /*
  * ══════════════════════════════════════════════════════════════
  *  INSTRUCCIONES: Google Apps Script para Google Sheets
@@ -4234,6 +4282,40 @@ function exitEditMode() {
  *
  *        return ContentService
  *          .createTextOutput(JSON.stringify({ status: 'ok' }))
+ *          .setMimeType(ContentService.MimeType.JSON);
+ *      }
+ *
+ *      if (action === 'deleteRecord') {
+ *        var ss = SpreadsheetApp.getActiveSpreadsheet();
+ *        var sheet = ss.getSheetByName('Registros');
+ *        if (!sheet) {
+ *          return ContentService
+ *            .createTextOutput(JSON.stringify({ status: 'ok', count: 0 }))
+ *            .setMimeType(ContentService.MimeType.JSON);
+ *        }
+ *
+ *        var payload = JSON.parse(e.parameter.d);
+ *        var target = payload.territorio.toLowerCase().trim();
+ *        var allData = sheet.getDataRange().getValues();
+ *        var headers = allData[0];
+ *
+ *        var rowsToDelete = [];
+ *        for (var i = 1; i < allData.length; i++) {
+ *          for (var j = 3; j < headers.length; j++) {
+ *            var val = allData[i][j] ? allData[i][j].toString().toLowerCase().trim() : '';
+ *            if (val === target || val.replace(/\s*\(\d+\)\s*$/, '') === target) {
+ *              rowsToDelete.push(i + 1);
+ *              break;
+ *            }
+ *          }
+ *        }
+ *
+ *        for (var k = rowsToDelete.length - 1; k >= 0; k--) {
+ *          sheet.deleteRow(rowsToDelete[k]);
+ *        }
+ *
+ *        return ContentService
+ *          .createTextOutput(JSON.stringify({ status: 'ok', count: rowsToDelete.length }))
  *          .setMimeType(ContentService.MimeType.JSON);
  *      }
  *
@@ -4955,7 +5037,7 @@ updatePendingBadge();
 
 // ── GSAP BUTTON PRESS FEEDBACK ──
 document.addEventListener('mousedown', (e) => {
-  const btn = e.target.closest('.upload-btn, .btn-cambiar-mapa, .btn-grabar, .map-empty-btn, .admin-login-btn, .admin-logout-btn, .theme-toggle, .menu-toggle, .login-submit, .login-cancel, .selector-card-btn, .btn-export-pdf');
+  const btn = e.target.closest('.upload-btn, .btn-cambiar-mapa, .btn-grabar, .map-empty-btn, .admin-login-btn, .admin-logout-btn, .theme-toggle, .menu-toggle, .login-submit, .login-cancel, .selector-card-btn, .btn-export-pdf, #d-btn-delete');
   if (!btn) return;
   gsap.to(btn, { opacity: 0.7, duration: 0.1, ease: 'power2.in' });
 });
