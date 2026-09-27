@@ -4457,6 +4457,7 @@ function loadSelectedMap(index) {
   activeMapFilter = mapData.id;
 
   $btnCambiarMapa.style.display = 'flex';
+  document.getElementById('btn-export-pdf').style.display = 'flex';
   recordsReady.then(() => {
     renderAll();
   });
