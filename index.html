@@ -615,6 +615,23 @@
     border-radius: 50%;
     flex-shrink: 0;
   }
+  .visit-legend-divider {
+    width: 100%;
+    height: 1px;
+    background: var(--border);
+    margin: 0.1rem 0;
+  }
+  .visit-legend-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    font-size: 0.55rem;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
   .sidebar-search {
     position: relative;
     padding: 0.5rem 0.9rem;
@@ -2091,6 +2108,14 @@
         <span id="pending-badge" style="display:none;background:#f59e0b;color:#000;border-radius:50%;width:18px;height:18px;font-size:0.65rem;font-weight:700;align-items:center;justify-content:center;margin-left:4px;"></span>
     </button>
 
+    <button class="btn-cambiar-mapa btn-export-pdf" id="btn-export-pdf" onclick="exportPDF()">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M13 2H3a1 1 0 00-1 1v10a1 1 0 001 1h10a1 1 0 001-1V3a1 1 0 00-1-1z"/>
+          <path d="M5 8h6M8 5v6"/>
+        </svg>
+        Exportar PDF
+    </button>
+
     <div class="header-stats">
       <div class="stat-chip">
         <span>Mapas</span>
@@ -2203,6 +2228,10 @@
         <div class="visit-legend-item"><span class="visit-dot" style="background:#10b981;"></span> Reciente (&lt;3 meses)</div>
         <div class="visit-legend-item"><span class="visit-dot" style="background:#f59e0b;"></span> 3 meses</div>
         <div class="visit-legend-item"><span class="visit-dot" style="background:#ef4444;"></span> Sin visita (4+ meses)</div>
+        <div class="visit-legend-divider"></div>
+        <div class="visit-legend-item"><span class="visit-legend-badge" style="background:#10b981;color:#fff;">✓</span> Con fecha de finalización</div>
+        <div class="visit-legend-item"><span class="visit-legend-badge" style="background:#f59e0b;color:#000;">?</span> Visitado sin fecha fin</div>
+        <div class="visit-legend-item"><span class="visit-legend-badge" style="background:#ef4444;color:#fff;">!</span> Sin trabajar</div>
       </div>
       <div id="map-list">
         <div class="map-empty">Adjunta archivos KML para comenzar</div>
@@ -2281,6 +2310,7 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script>
 // ── COLOR PALETTE ──
 const MAP_COLORS = [
@@ -4600,6 +4630,193 @@ fetchKmlsFromSheet().then(ok => {
     }, '-=0.1');
 });
 
+function exportPDF() {
+  if (loadedMaps.length === 0) {
+    showWorkflowToast('No hay mapas cargados para exportar', '⚠️', 3000);
+    return;
+  }
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF('p', 'mm', 'a4');
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  const margin = 14;
+  let y = margin;
+
+  function newPage() {
+    doc.addPage();
+    y = margin;
+  }
+
+  function ensureSpace(needed) {
+    if (y + needed > pageH - margin) newPage();
+  }
+
+  doc.setFontSize(18);
+  doc.setFont(undefined, 'bold');
+  doc.text('MAPVIEW - Reporte de Territorios', margin, y);
+  y += 8;
+
+  doc.setFontSize(10);
+  doc.setFont(undefined, 'normal');
+  doc.text(`Fecha: ${new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' })}`, margin, y);
+  y += 5;
+  doc.text(`Total de mapas: ${loadedMaps.length}`, margin, y);
+  y += 8;
+
+  const totalBlocks = loadedMaps.reduce((s, m) => s + m.blocks.length, 0);
+  doc.text(`Total de bloques: ${totalBlocks}`, margin, y);
+  y += 10;
+
+  const statusColors = {
+    fresh: [16, 185, 129],
+    warning: [245, 158, 11],
+    alert: [239, 68, 68]
+  };
+  const statusLabels = {
+    fresh: 'Reciente',
+    warning: '3 meses',
+    alert: 'Sin visita'
+  };
+
+  doc.setDrawColor(200);
+  doc.line(margin, y, pageW - margin, y);
+  y += 4;
+
+  doc.setFontSize(12);
+  doc.setFont(undefined, 'bold');
+  doc.text('LEYENDA', margin, y);
+  y += 6;
+
+  doc.setFontSize(9);
+  doc.setFont(undefined, 'normal');
+
+  const legendItems = [
+    { color: statusColors.fresh, label: 'Reciente - Visitado en menos de 3 meses con fecha de finalizacion' },
+    { color: statusColors.warning, label: '3 meses - Visitado hace 3-4 meses' },
+    { color: statusColors.alert, label: 'Sin visita - Sin registro o mas de 4 meses' }
+  ];
+
+  legendItems.forEach(item => {
+    doc.setFillColor(item.color[0], item.color[1], item.color[2]);
+    doc.circle(margin + 3, y - 1.2, 2, 'F');
+    doc.text(item.label, margin + 8, y);
+    y += 5;
+  });
+
+  y += 2;
+
+  const iconLegend = [
+    { bg: [16, 185, 129], fg: [255, 255, 255], char: 'V', label: 'Visitado con fecha de finalizacion' },
+    { bg: [245, 158, 11], fg: [0, 0, 0], char: '?', label: 'Visitado sin fecha de finalizacion' },
+    { bg: [239, 68, 68], fg: [255, 255, 255], char: '!', label: 'Sin trabajar' }
+  ];
+
+  iconLegend.forEach(item => {
+    doc.setFillColor(item.bg[0], item.bg[1], item.bg[2]);
+    doc.circle(margin + 3, y - 1.2, 2.5, 'F');
+    doc.setTextColor(item.fg[0], item.fg[1], item.fg[2]);
+    doc.setFont(undefined, 'bold');
+    doc.setFontSize(7);
+    doc.text(item.char, margin + 3, y + 0.3, { align: 'center' });
+    doc.setTextColor(0, 0, 0);
+    doc.setFont(undefined, 'normal');
+    doc.setFontSize(9);
+    doc.text(item.label, margin + 8, y);
+    y += 5;
+  });
+
+  y += 4;
+  doc.setDrawColor(200);
+  doc.line(margin, y, pageW - margin, y);
+  y += 8;
+
+  loadedMaps.forEach((mapData, mapIdx) => {
+    ensureSpace(20);
+
+    doc.setFillColor(59, 130, 246);
+    doc.rect(margin, y - 4, pageW - margin * 2, 8, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFont(undefined, 'bold');
+    doc.setFontSize(11);
+    doc.text(`${mapIdx + 1}. ${mapData.name} (${mapData.blocks.length} bloques)`, margin + 3, y + 1);
+    doc.setTextColor(0, 0, 0);
+    y += 12;
+
+    const colWidths = { num: 10, name: 55, status: 30, publisher: 40, dates: 45 };
+    if (pageW < margin * 2 + colWidths.num + colWidths.name + colWidths.status + colWidths.publisher + colWidths.dates) {
+      colWidths.name = 40;
+      colWidths.publisher = 30;
+      colWidths.dates = 35;
+    }
+    const startX = margin;
+
+    ensureSpace(8);
+    doc.setFillColor(240, 240, 240);
+    doc.rect(startX, y - 3.5, pageW - margin * 2, 7, 'F');
+    doc.setFont(undefined, 'bold');
+    doc.setFontSize(8);
+    doc.text('#', startX + 2, y + 1);
+    doc.text('Territorio', startX + colWidths.num + 2, y + 1);
+    doc.text('Estado', startX + colWidths.num + colWidths.name + 2, y + 1);
+    doc.text('Publicador', startX + colWidths.num + colWidths.name + colWidths.status + 2, y + 1);
+    doc.text('Fechas', startX + colWidths.num + colWidths.name + colWidths.status + colWidths.publisher + 2, y + 1);
+    y += 7;
+    doc.setFont(undefined, 'normal');
+
+    mapData.blocks.forEach((block, i) => {
+      ensureSpace(7);
+      const visitInfo = getVisitStatusInfo(block.name);
+      const record = getRecordForBlock(block.name);
+      const sc = statusColors[visitInfo.status] || statusColors.alert;
+
+      if (i % 2 === 0) {
+        doc.setFillColor(250, 250, 250);
+        doc.rect(startX, y - 3.5, pageW - margin * 2, 7, 'F');
+      }
+
+      doc.setFillColor(sc[0], sc[1], sc[2]);
+      doc.circle(startX + 3, y, 1.8, 'F');
+
+      doc.setFontSize(8);
+      doc.text(String(i + 1), startX + 7, y + 1);
+      doc.text(block.name.substring(0, 32), startX + colWidths.num + 2, y + 1);
+      doc.text(statusLabels[visitInfo.status] || '', startX + colWidths.num + colWidths.name + 2, y + 1);
+
+      const pub = record ? (record.publicador || '') : '';
+      doc.text(pub.substring(0, 22), startX + colWidths.num + colWidths.name + colWidths.status + 2, y + 1);
+
+      let dateStr = '';
+      if (record) {
+        const d1 = record.fecha_inicio ? new Date(record.fecha_inicio) : null;
+        const d2 = record.fecha_fin ? new Date(record.fecha_fin) : null;
+        const fmt = d => d && !isNaN(d.getTime()) ? d.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit' }) : '';
+        if (d1 && d2) dateStr = `${fmt(d1)} - ${fmt(d2)}`;
+        else if (d1) dateStr = fmt(d1);
+        else if (d2) dateStr = fmt(d2);
+      }
+      doc.text(dateStr, startX + colWidths.num + colWidths.name + colWidths.status + colWidths.publisher + 2, y + 1);
+
+      y += 6;
+    });
+
+    y += 8;
+  });
+
+  const pageCount = doc.internal.getNumberOfPages();
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i);
+    doc.setFontSize(8);
+    doc.setTextColor(150);
+    doc.text(`MapView - Pagina ${i} de ${pageCount}`, pageW / 2, pageH - 6, { align: 'center' });
+  }
+
+  const activeMap = loadedMaps.find(m => m.id === activeMapFilter);
+  const fileName = `MapView_${activeMap ? activeMap.name.replace(/\s+/g, '_') : 'Territorios'}_${new Date().toISOString().slice(0, 10)}.pdf`;
+  doc.save(fileName);
+  showWorkflowToast('PDF exportado correctamente ✓', '📄', 3000);
+}
+
 window.addEventListener('online', () => {
   document.getElementById('offline-badge').style.display = 'none';
   document.getElementById('status-dot').style.display = '';
@@ -4631,7 +4848,7 @@ updatePendingBadge();
 
 // ── GSAP BUTTON PRESS FEEDBACK ──
 document.addEventListener('mousedown', (e) => {
-  const btn = e.target.closest('.upload-btn, .btn-cambiar-mapa, .btn-grabar, .map-empty-btn, .admin-login-btn, .admin-logout-btn, .theme-toggle, .menu-toggle, .login-submit, .login-cancel, .selector-card-btn');
+  const btn = e.target.closest('.upload-btn, .btn-cambiar-mapa, .btn-grabar, .map-empty-btn, .admin-login-btn, .admin-logout-btn, .theme-toggle, .menu-toggle, .login-submit, .login-cancel, .selector-card-btn, .btn-export-pdf');
   if (!btn) return;
   gsap.to(btn, { opacity: 0.7, duration: 0.1, ease: 'power2.in' });
 });
