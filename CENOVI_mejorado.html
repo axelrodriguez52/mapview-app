@@ -2626,6 +2626,7 @@ function setAdminMode(active) {
   document.body.classList.toggle('is-admin', active);
   localStorage.setItem('mapview-admin', active ? '1' : '0');
   updateAdminUI();
+  if (selectedBlockKey) renderDetailRecords();
 }
 
 function updateAdminUI() {
@@ -2974,6 +2975,13 @@ function getEditableRecords(blockName) {
     const d = new Date(ts);
     return d.getFullYear() === curYear && d.getMonth() === curMonth;
   });
+}
+
+function getAllRecordsForBlock(blockName) {
+  const target = normalizeTerritoryName(blockName);
+  return sheetRecords
+    .filter(r => r.territorio && normalizeTerritoryName(r.territorio) === target)
+    .sort((a, b) => parseDateValue(b.fecha_fin || b.fecha_inicio || '') - parseDateValue(a.fecha_fin || a.fecha_inicio || ''));
 }
 
 // ── VISIT STATUS COLORS ──
@@ -3880,7 +3888,7 @@ function renderDetailRecords() {
     recordHtml += '<span class="detail-empty" style="font-style:normal;color:var(--gold);">Conectando con Google Sheets...</span>';
   }
 
-  const editableRecords = getEditableRecords(block.name);
+  const editableRecords = isAdmin ? getAllRecordsForBlock(block.name) : getEditableRecords(block.name);
   if (editableRecords.length > 0) {
     recordHtml += `<div class="detail-edit-section">`;
     if (editableRecords.length === 1) {
@@ -3889,7 +3897,7 @@ function renderDetailRecords() {
       const f = formatRecordDate(rec.fecha_fin || rec.fecha_inicio || '');
       recordHtml += `
         <div class="detail-edit-single">
-          <span class="detail-edit-info">Registro del mes: <strong>${pub}</strong>${f ? ' — ' + f : ''}</span>
+          <span class="detail-edit-info">Registro: <strong>${pub}</strong>${f ? ' — ' + f : ''}</span>
           <div style="display:flex;gap:4px;">
             <button class="detail-edit-btn" onclick="startEditRecord('${(rec.publicador || '').replace(/'/g, "\\'")}', '${(rec.fecha_inicio || '').replace(/'/g, "\\'")}', '${(rec.fecha_fin || '').replace(/'/g, "\\'")}')">
               Editar
@@ -3900,7 +3908,8 @@ function renderDetailRecords() {
           </div>
         </div>`;
     } else {
-      recordHtml += `<div class="detail-edit-multi"><span class="detail-edit-info">Varios registros este mes (${editableRecords.length}):</span><div class="detail-edit-list">`;
+      const listLabel = isAdmin ? `Todos los registros (${editableRecords.length})` : `Varios registros este mes (${editableRecords.length})`;
+      recordHtml += `<div class="detail-edit-multi"><span class="detail-edit-info">${listLabel}:</span><div class="detail-edit-list">`;
       editableRecords.forEach(rec => {
         const pub = rec.publicador || 'Sin publicador';
         const f = formatRecordDate(rec.fecha_fin || rec.fecha_inicio || '');
