@@ -1158,7 +1158,22 @@
     font-size: 0.85rem; font-weight: 600;
     color: var(--text);
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    flex: 1; min-width: 0;
   }
+  .selector-card-delete {
+    margin-left: auto;
+    flex-shrink: 0;
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    cursor: pointer;
+    padding: 5px;
+    border-radius: 6px;
+    transition: all 0.25s var(--ease-apple);
+  }
+  .selector-card-delete:hover { color: #ef4444; border-color: #ef4444; background: rgba(239,68,68,0.1); }
+  .selector-card-delete:active { transform: scale(0.85); transition-duration: 0.1s; }
+  .selector-card-delete svg { width: 13px; height: 13px; display: block; }
   .selector-card-count {
     font-family: 'JetBrains Mono', monospace;
     font-size: 0.65rem;
@@ -3428,6 +3443,7 @@ function addMap(fileName, kmlBlocks) {
   const mapData = {
     id: nextMapId++,
     name: fileName.replace(/\.(kml|xml)$/i, ''),
+    fileName: fileName,
     color: color,
     visible: true,
     blocks: kmlBlocks.map((b, i) => ({
@@ -3734,11 +3750,15 @@ function renderMapList() {
     const deleteBtn = item.querySelector('.map-delete-btn');
     deleteBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-      if (confirm(`¿Eliminar el mapa "${m.name}" y todos sus bloques?`)) {
-        deleteKmlFromSheet(m.name);
-        deleteKmlData(m.name);
+      if (confirm(`¿Eliminar el mapa "${m.name}" y todos sus bloques?\n\nTambién se borrará de Google Sheets.`)) {
+        const fileName = m.fileName || m.name;
+        deleteKmlFromSheet(fileName);
+        if (m.fileName && m.fileName !== m.name) deleteKmlFromSheet(m.name);
+        deleteKmlData(fileName);
+        if (m.fileName && m.fileName !== m.name) deleteKmlData(m.name);
         removeMap(m.id);
         saveKmlToStorage();
+        showWorkflowToast(`Mapa "${m.name}" eliminado ✓`, '🗑️', 3000);
       }
     });
 
@@ -4895,11 +4915,28 @@ function openMapSelector() {
       <div class="selector-card-top">
         <div class="selector-card-dot" style="background:${color.solid}; color:${color.solid}"></div>
         <div class="selector-card-name">${kml.fileName.replace(/\.(kml|xml)$/i, '')}</div>
+        <button class="selector-card-delete admin-only" title="Eliminar KML" aria-label="Eliminar KML">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+        </button>
       </div>
       <div class="selector-card-count">${kml.blocks.length} polígonos</div>
       <button class="selector-card-btn">Abrir este mapa</button>
     `;
     card.addEventListener('click', () => loadSelectedMap(i));
+    const delBtn = card.querySelector('.selector-card-delete');
+    delBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (confirm(`¿Eliminar el KML "${kml.fileName}" y todos sus polígonos?\n\nTambién se borrará de Google Sheets.`)) {
+        deleteKmlFromSheet(kml.fileName);
+        deleteKmlData(kml.fileName);
+        const idx = loadedMaps.findIndex(m => (m.fileName || m.name) === kml.fileName || m.name === kml.fileName.replace(/\.(kml|xml)$/i, ''));
+        if (idx !== -1) removeMap(loadedMaps[idx].id);
+        saveKmlToStorage();
+        renderMapList();
+        openMapSelector();
+        showWorkflowToast(`KML "${kml.fileName.replace(/\.(kml|xml)$/i, '')}" eliminado ✓`, '🗑️', 3000);
+      }
+    });
     $selectorGrid.appendChild(card);
   });
 
@@ -4951,6 +4988,7 @@ function loadSelectedMap(index) {
   const mapData = {
     id: nextMapId++,
     name: kml.fileName.replace(/\.(kml|xml)$/i, ''),
+    fileName: kml.fileName,
     color: color,
     visible: true,
     blocks: kml.blocks.map((b, i) => ({
