@@ -2544,7 +2544,7 @@ function fetchRecords() {
   return fetch(`${GOOGLE_SHEETS_URL}?action=getRecords`)
     .then(r => r.json())
     .then(data => {
-      sheetRecords = data.records || [];
+      sheetRecords = Array.isArray(data) ? data : (data.records || []);
       buildRecordsMap();
       recordsLoaded = true;
       saveRecordsToStorage();
@@ -2554,6 +2554,7 @@ function fetchRecords() {
         renderMapList();
         renderBlockList();
       }
+      if (selectedBlockKey) renderDetailRecords();
     })
     .catch((err) => {
       console.warn('[MapView] Error al cargar registros de Google Sheets:', err);
@@ -2727,9 +2728,10 @@ function fetchKmlsFromSheet() {
       return r.json();
     })
     .then(data => {
-      if (data.kmls && data.kmls.length > 0) {
+      const rows = Array.isArray(data) ? data : (data.kmls || []);
+      if (rows.length > 0) {
         const grouped = {};
-        data.kmls.forEach(k => {
+        rows.forEach(k => {
           if (!k.fileName || k.fileName === 'fileName' || k.fileName === 'fileName') return;
           if (!k.blockName || k.blockName === 'blockName' || !k.coords) return;
           if (!grouped[k.fileName]) {
@@ -3491,6 +3493,78 @@ function findBlockByKey(key) {
   return { mapData: m, block: b };
 }
 
+function renderDetailRecords() {
+  if (!selectedBlockKey) return;
+  const found = findBlockByKey(selectedBlockKey);
+  if (!found) return;
+  const { mapData, block } = found;
+
+  $dName.textContent = block.name;
+  const visitDetail = getVisitStatusInfo(block.name);
+  let recordHtml = `
+    <div class="detail-map-badge" style="color:${mapData.color.solid}; border: 1px solid ${mapData.color.solid}33; background: ${mapData.color.solid}15;">
+      <div class="map-color-dot" style="background:${mapData.color.solid}; width:7px; height:7px;"></div>
+      ${mapData.name}
+    </div>
+    <div class="detail-map-badge" style="color:${visitDetail.colors.css}; border: 1px solid ${visitDetail.colors.css}33; background: ${visitDetail.colors.css}15; margin-bottom:0.5rem;">
+      <div class="map-color-dot" style="background:${visitDetail.colors.css}; width:7px; height:7px;"></div>
+      ${visitDetail.colors.label}
+    </div>`;
+  if (visitDetail.lastDate) {
+    const displayDate = visitDetail.lastDate.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
+    recordHtml += `
+      <div class="detail-row">
+        <span class="detail-key" style="color:${visitDetail.colors.css};">Ultima visita</span>
+        <span class="detail-val" style="color:${visitDetail.colors.css};font-weight:600;">${displayDate}</span>
+      </div>`;
+  } else {
+    recordHtml += `<span class="detail-empty" style="color:${visitDetail.colors.css};">Sin visita registrada</span>`;
+  }
+  if (!visitDetail.lastDate && !recordsLoaded) {
+    recordHtml += '<span class="detail-empty" style="font-style:normal;color:var(--gold);">Conectando con Google Sheets...</span>';
+  }
+
+  const editableRecords = getEditableRecords(block.name);
+  if (editableRecords.length > 0) {
+    recordHtml += `<div class="detail-edit-section">`;
+    if (editableRecords.length === 1) {
+      const rec = editableRecords[0];
+      const pub = rec.publicador || 'Sin publicador';
+      const f = rec.fecha_inicio || rec.fecha_fin || '';
+      recordHtml += `
+        <div class="detail-edit-single">
+          <span class="detail-edit-info">Registro del mes: <strong>${pub}</strong>${f ? ' — ' + f : ''}</span>
+          <div style="display:flex;gap:4px;">
+            <button class="detail-edit-btn" onclick="startEditRecord('${(rec.publicador || '').replace(/'/g, "\\'")}', '${(rec.fecha_inicio || '').replace(/'/g, "\\'")}', '${(rec.fecha_fin || '').replace(/'/g, "\\'")}')">
+              Editar
+            </button>
+            <button class="detail-edit-btn admin-only" style="background:rgba(239,68,68,0.15);border:1px solid #ef4444;color:#ef4444;" onclick="deleteSingleRecord('${(rec.publicador || '').replace(/'/g, "\\'")}', '${(rec.fecha_inicio || '').replace(/'/g, "\\'")}', '${(rec.fecha_fin || '').replace(/'/g, "\\'")}', '${(rec.territorio || '').replace(/'/g, "\\'")}')">
+              Borrar
+            </button>
+          </div>
+        </div>`;
+    } else {
+      recordHtml += `<div class="detail-edit-multi"><span class="detail-edit-info">Varios registros este mes (${editableRecords.length}):</span><div class="detail-edit-list">`;
+      editableRecords.forEach(rec => {
+        const pub = rec.publicador || 'Sin publicador';
+        const f = rec.fecha_inicio || rec.fecha_fin || '';
+        recordHtml += `
+          <div style="display:flex;gap:4px;align-items:center;">
+            <button class="detail-edit-btn detail-edit-option" onclick="startEditRecord('${(rec.publicador || '').replace(/'/g, "\\'")}', '${(rec.fecha_inicio || '').replace(/'/g, "\\'")}', '${(rec.fecha_fin || '').replace(/'/g, "\\'")}')">
+              ${pub}${f ? ' — ' + f : ''}
+            </button>
+            <button class="detail-edit-btn admin-only" style="background:rgba(239,68,68,0.15);border:1px solid #ef4444;color:#ef4444;padding:2px 6px;font-size:0.6rem;" onclick="deleteSingleRecord('${(rec.publicador || '').replace(/'/g, "\\'")}', '${(rec.fecha_inicio || '').replace(/'/g, "\\'")}', '${(rec.fecha_fin || '').replace(/'/g, "\\'")}', '${(rec.territorio || '').replace(/'/g, "\\'")}')">
+              ✕
+            </button>
+          </div>`;
+      });
+      recordHtml += `</div></div>`;
+    }
+    recordHtml += `</div>`;
+  }
+  $dRows.innerHTML = recordHtml;
+}
+
 function selectBlock(key) {
   mobileZoomOnly = false;
   const hud = $hudSelection;
@@ -3585,69 +3659,7 @@ function selectBlock(key) {
   });
 
   $dName.textContent = block.name;
-  const visitDetail = getVisitStatusInfo(block.name);
-  let recordHtml = `
-    <div class="detail-map-badge" style="color:${mapData.color.solid}; border: 1px solid ${mapData.color.solid}33; background: ${mapData.color.solid}15;">
-      <div class="map-color-dot" style="background:${mapData.color.solid}; width:7px; height:7px;"></div>
-      ${mapData.name}
-    </div>
-    <div class="detail-map-badge" style="color:${visitDetail.colors.css}; border: 1px solid ${visitDetail.colors.css}33; background: ${visitDetail.colors.css}15; margin-bottom:0.5rem;">
-      <div class="map-color-dot" style="background:${visitDetail.colors.css}; width:7px; height:7px;"></div>
-      ${visitDetail.colors.label}
-    </div>`;
-  if (visitDetail.lastDate) {
-    const displayDate = visitDetail.lastDate.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
-    recordHtml += `
-      <div class="detail-row">
-        <span class="detail-key" style="color:${visitDetail.colors.css};">Ultima visita</span>
-        <span class="detail-val" style="color:${visitDetail.colors.css};font-weight:600;">${displayDate}</span>
-      </div>`;
-  } else {
-    recordHtml += `<span class="detail-empty" style="color:${visitDetail.colors.css};">Sin visita registrada</span>`;
-  }
-  if (!visitDetail.lastDate && !recordsLoaded) {
-    recordHtml += '<span class="detail-empty" style="font-style:normal;color:var(--gold);">Conectando con Google Sheets...</span>';
-  }
-
-  const editableRecords = getEditableRecords(block.name);
-  if (editableRecords.length > 0) {
-    recordHtml += `<div class="detail-edit-section">`;
-    if (editableRecords.length === 1) {
-      const rec = editableRecords[0];
-      const pub = rec.publicador || 'Sin publicador';
-      const f = rec.fecha_inicio || rec.fecha_fin || '';
-      recordHtml += `
-        <div class="detail-edit-single">
-          <span class="detail-edit-info">Registro del mes: <strong>${pub}</strong>${f ? ' — ' + f : ''}</span>
-          <div style="display:flex;gap:4px;">
-            <button class="detail-edit-btn" onclick="startEditRecord('${rec.publicador || ''}', '${rec.fecha_inicio || ''}', '${rec.fecha_fin || ''}')">
-              Editar
-            </button>
-            <button class="detail-edit-btn admin-only" style="background:rgba(239,68,68,0.15);border:1px solid #ef4444;color:#ef4444;" onclick="deleteSingleRecord('${(rec.publicador || '').replace(/'/g, "\\'")}', '${(rec.fecha_inicio || '').replace(/'/g, "\\'")}', '${(rec.fecha_fin || '').replace(/'/g, "\\'")}', '${(rec.territorio || '').replace(/'/g, "\\'")}')">
-              Borrar
-            </button>
-          </div>
-        </div>`;
-    } else {
-      recordHtml += `<div class="detail-edit-multi"><span class="detail-edit-info">Varios registros este mes (${editableRecords.length}):</span><div class="detail-edit-list">`;
-      editableRecords.forEach((rec, idx) => {
-        const pub = rec.publicador || 'Sin publicador';
-        const f = rec.fecha_inicio || rec.fecha_fin || '';
-        recordHtml += `
-          <div style="display:flex;gap:4px;align-items:center;">
-            <button class="detail-edit-btn detail-edit-option" onclick="startEditRecord('${(rec.publicador || '').replace(/'/g, "\\'")}', '${(rec.fecha_inicio || '').replace(/'/g, "\\'")}', '${(rec.fecha_fin || '').replace(/'/g, "\\'")}')">
-              ${pub}${f ? ' — ' + f : ''}
-            </button>
-            <button class="detail-edit-btn admin-only" style="background:rgba(239,68,68,0.15);border:1px solid #ef4444;color:#ef4444;padding:2px 6px;font-size:0.6rem;" onclick="deleteSingleRecord('${(rec.publicador || '').replace(/'/g, "\\'")}', '${(rec.fecha_inicio || '').replace(/'/g, "\\'")}', '${(rec.fecha_fin || '').replace(/'/g, "\\'")}', '${(rec.territorio || '').replace(/'/g, "\\'")}')">
-              ✕
-            </button>
-          </div>`;
-      });
-      recordHtml += `</div></div>`;
-    }
-    recordHtml += `</div>`;
-  }
-  $dRows.innerHTML = recordHtml;
+  renderDetailRecords();
 
   $dForm.style.display = 'flex';
   gsap.fromTo($dForm, {
