@@ -3094,7 +3094,11 @@ function autoLoadSavedKmls() {
 }
 
 function deleteKmlData(fileName) {
-  allKmlData = allKmlData.filter(k => k.fileName !== fileName);
+  const base = fileName.replace(/\.(kml|xml)$/i, '').toLowerCase();
+  allKmlData = allKmlData.filter(k => {
+    const kBase = k.fileName.replace(/\.(kml|xml)$/i, '').toLowerCase();
+    return k.fileName !== fileName && kBase !== base;
+  });
   saveKmlToStorage();
 }
 
@@ -3189,7 +3193,8 @@ function saveAllKmlsToSheet() {
 }
 
 function deleteKmlFromSheet(fileName) {
-  return fetch(`${GOOGLE_SHEETS_URL}?action=deleteKml&d=${encodeURIComponent(JSON.stringify({ fileName: fileName }))}`)
+  const d = JSON.stringify({ fileName: fileName });
+  return fetch(`${GOOGLE_SHEETS_URL}?action=deleteKml&fileName=${encodeURIComponent(fileName)}&d=${encodeURIComponent(d)}`)
     .then(r => r.json())
     .catch(err => console.warn('[MapView] Error eliminando KML de Sheets:', err));
 }
