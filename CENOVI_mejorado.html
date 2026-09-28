@@ -5175,7 +5175,27 @@ fetchKmlsFromSheet().then(ok => {
     }, '-=0.1');
 });
 
-function drawMapCanvas(mapData) {
+function loadOSMTile(z, x, y) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    const timeout = setTimeout(() => resolve(null), 8000);
+    img.onload = () => { clearTimeout(timeout); resolve(img); };
+    img.onerror = () => { clearTimeout(timeout); resolve(null); };
+    img.src = `https://tile.openstreetmap.org/${z}/${x}/${y}.png`;
+  });
+}
+
+function mercatorX(lng) {
+  return (lng + 180) / 360;
+}
+function mercatorY(lat) {
+  const clamped = Math.max(-85.05112878, Math.min(85.05112878, lat));
+  const rad = clamped * Math.PI / 180;
+  return (1 - Math.log(Math.tan(rad) + 1 / Math.cos(rad)) / Math.PI) / 2;
+}
+
+async function drawMapCanvas(mapData) {
   const canvas = document.createElement('canvas');
   const W = 900, H = 500;
   canvas.width = W;
@@ -5197,19 +5217,76 @@ function drawMapCanvas(mapData) {
 
   if (minLat === Infinity) return canvas;
 
-  const latRange = maxLat - minLat || 0.001;
-  const lngRange = maxLng - minLng || 0.001;
-  const pad = 30;
-  const scale = Math.min((W - pad * 2) / lngRange, (H - pad * 2) / latRange);
-  const offX = (W - lngRange * scale) / 2;
-  const offY = (H - latRange * scale) / 2;
+  if (maxLat - minLat < 0.002) { minLat -= 0.001; maxLat += 0.001; }
+  if (maxLng - minLng < 0.002) { minLng -= 0.001; maxLng += 0.001; }
+
+  const mx0 = mercatorX(minLng), mx1 = mercatorX(maxLng);
+  const my0 = mercatorY(maxLat), my1 = mercatorY(minLat);
+  const spanX = mx1 - mx0;
+  const spanY = my1 - my0;
+
+  const pad = 34;
+  const availW = W - pad * 2;
+  const availH = H - pad * 2;
+
+  const fit = Math.min(availW / spanX, availH / spanY);
+  let z = Math.floor(Math.log2(fit / 256));
+  z = Math.max(0, Math.min(18, z));
+
+  let tiles = [];
+  while (tiles.length === 0 || tiles.length > 70) {
+    const n = Math.pow(2, z);
+    const tx0 = Math.max(0, Math.floor(mx0 * n));
+    const tx1 = Math.min(n - 1, Math.floor(mx1 * n));
+    const ty0 = Math.max(0, Math.floor(my0 * n));
+    const ty1 = Math.min(n - 1, Math.floor(my1 * n));
+    tiles = [];
+    for (let tx = tx0; tx <= tx1; tx++) {
+      for (let ty = ty0; ty <= ty1; ty++) {
+        tiles.push({ z, x: tx, y: ty });
+      }
+    }
+    if (tiles.length > 70) {
+      if (z === 0) break;
+      z--;
+    }
+  }
+
+  const S = Math.min(availW / spanX, availH / spanY);
+  const ox = pad + (availW - spanX * S) / 2 - mx0 * S;
+  const oy = pad + (availH - spanY * S) / 2 - my0 * S;
 
   function project(lat, lng) {
-    return [
-      offX + (lng - minLng) * scale,
-      offY + (maxLat - lat) * scale
-    ];
+    return [ox + mercatorX(lng) * S, oy + mercatorY(lat) * S];
   }
+
+  const tileImgs = await Promise.all(tiles.map(t => loadOSMTile(t.z, t.x, t.y)));
+  const n = Math.pow(2, z);
+  const tilePx = S / n;
+
+  tiles.forEach((t, i) => {
+    const img = tileImgs[i];
+    if (!img) return;
+    const dx = ox + (t.x / n) * S;
+    const dy = oy + (t.y / n) * S;
+    try { ctx.drawImage(img, dx, dy, tilePx + 0.5, tilePx + 0.5); } catch (e) {}
+  });
+
+  const anyTile = tileImgs.some(Boolean);
+  if (!anyTile) {
+    ctx.fillStyle = '#f2f2f2';
+    ctx.fillRect(0, 0, W, H);
+    ctx.strokeStyle = '#d8d8d8';
+    ctx.lineWidth = 1;
+    for (let g = 0; g <= W; g += 50) { ctx.beginPath(); ctx.moveTo(g, 0); ctx.lineTo(g, H); ctx.stroke(); }
+    for (let g = 0; g <= H; g += 50) { ctx.beginPath(); ctx.moveTo(0, g); ctx.lineTo(W, g); ctx.stroke(); }
+  }
+
+  ctx.font = '9px sans-serif';
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'bottom';
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  ctx.fillText('© OpenStreetMap contributors', W - 8, H - 8);
 
   const statusRGB = {
     fresh: 'rgba(16,185,129,0.35)',
@@ -5236,7 +5313,7 @@ function drawMapCanvas(mapData) {
     ctx.fillStyle = statusRGB[status] || statusRGB.alert;
     ctx.fill();
     ctx.strokeStyle = strokeRGB[status] || strokeRGB.alert;
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = 2;
     ctx.stroke();
   });
 
@@ -5259,7 +5336,14 @@ function drawMapCanvas(mapData) {
 
     if (icon) {
       ctx.beginPath();
-      ctx.arc(cx, cy, 7, 0, Math.PI * 2);
+      ctx.arc(cx, cy, 8, 0, Math.PI * 2);
+      ctx.fillStyle = '#fff';
+      ctx.fill();
+      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = iconBg;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(cx, cy, 6, 0, Math.PI * 2);
       ctx.fillStyle = iconBg;
       ctx.fill();
       ctx.fillStyle = iconBg === '#f59e0b' ? '#000' : '#fff';
@@ -5273,11 +5357,13 @@ function drawMapCanvas(mapData) {
   return canvas;
 }
 
-function exportPDF() {
+async function exportPDF() {
   if (loadedMaps.length === 0) {
     showWorkflowToast('No hay mapas cargados para exportar', '⚠️', 3000);
     return;
   }
+
+  showWorkflowToast('Generando PDF con mapa base...', '⏳', 3000);
 
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF('p', 'mm', 'a4');
@@ -5374,7 +5460,8 @@ function exportPDF() {
   doc.line(margin, y, pageW - margin, y);
   y += 8;
 
-  loadedMaps.forEach((mapData, mapIdx) => {
+  for (let mapIdx = 0; mapIdx < loadedMaps.length; mapIdx++) {
+    const mapData = loadedMaps[mapIdx];
     ensureSpace(20);
 
     doc.setFillColor(59, 130, 246);
@@ -5386,7 +5473,7 @@ function exportPDF() {
     doc.setTextColor(0, 0, 0);
     y += 12;
 
-    const mapCanvas = drawMapCanvas(mapData);
+    const mapCanvas = await drawMapCanvas(mapData);
     const imgData = mapCanvas.toDataURL('image/png');
     const imgW = pageW - margin * 2;
     const imgH = imgW * (mapCanvas.height / mapCanvas.width);
@@ -5452,7 +5539,7 @@ function exportPDF() {
     });
 
     y += 8;
-  });
+  }
 
   const pageCount = doc.internal.getNumberOfPages();
   for (let i = 1; i <= pageCount; i++) {
