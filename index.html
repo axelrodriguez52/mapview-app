@@ -2402,8 +2402,9 @@ function fetchAdminPassword() {
   return fetch(`${GOOGLE_SHEETS_URL}?action=getPassword`)
     .then(r => r.json())
     .then(data => {
-      if (data.password) {
-        adminPassword = data.password;
+      const clave = data.clave || data.password;
+      if (clave) {
+        adminPassword = clave.toString().trim();
       }
       passwordFetched = true;
     })
@@ -2484,7 +2485,8 @@ $loginSubmit.addEventListener('click', () => {
 });
 
 function checkLogin() {
-  if ($loginPassword.value === adminPassword) {
+  const entered = $loginPassword.value.trim();
+  if (entered && entered === adminPassword) {
     setAdminMode(true);
     $loginModal.classList.remove('active');
     $loginError.classList.remove('show');
