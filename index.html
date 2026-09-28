@@ -2062,6 +2062,155 @@
     color: #fff;
   }
 
+  /* ── RECORDS MANAGER (admin) ── */
+  .sidebar-records-btn {
+    margin-left: auto;
+    background: none;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 6px;
+    transition: all 0.25s var(--ease-apple);
+  }
+  .sidebar-records-btn:hover { color: #ef4444; background: rgba(239,68,68,0.1); }
+  .sidebar-records-btn:active { transform: scale(0.9); transition-duration: 0.1s; }
+  .sidebar-records-btn svg { width: 14px; height: 14px; }
+  body.is-admin .sidebar-close { margin-left: 0; }
+
+  .records-box {
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    border-radius: 14px;
+    padding: 1.4rem;
+    width: 100%;
+    max-width: 520px;
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+    gap: 0.8rem;
+    box-shadow: 0 8px 32px var(--shadow-color);
+  }
+  .records-box h3 {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .records-box h3 svg { width: 18px; height: 18px; color: var(--gold); }
+  .records-box > input {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 0.55rem 0.7rem;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-family: 'Inter', sans-serif;
+    outline: none;
+    transition: border-color 0.15s ease;
+  }
+  .records-box > input:focus { border-color: var(--accent); }
+  .records-box > input::placeholder { color: var(--muted); }
+  .records-list {
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    min-height: 0;
+    flex: 1;
+    padding-right: 2px;
+  }
+  .records-empty {
+    font-size: 0.75rem;
+    color: var(--muted);
+    font-style: italic;
+    text-align: center;
+    padding: 1rem 0;
+  }
+  .records-group-title {
+    font-size: 0.6rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    padding: 0.5rem 0 0.15rem;
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+  }
+  .records-group-title:first-child { padding-top: 0; }
+  .records-group-title .map-color-dot { width: 7px; height: 7px; }
+  .records-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.45rem 0.6rem;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    min-width: 0;
+  }
+  .records-item-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+  .records-item-terr {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .records-item-meta {
+    font-size: 0.6rem;
+    color: var(--muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .records-item-del {
+    flex-shrink: 0;
+    padding: 0.3rem 0.55rem;
+    border: 1px solid #ef4444;
+    border-radius: 5px;
+    background: rgba(239,68,68,0.12);
+    color: #ef4444;
+    font-size: 0.62rem;
+    font-weight: 700;
+    font-family: 'Inter', sans-serif;
+    cursor: pointer;
+    transition: opacity 0.2s;
+  }
+  .records-item-del:hover { opacity: 0.8; }
+  .records-item-del:disabled { opacity: 0.4; cursor: not-allowed; }
+  .records-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding-top: 0.3rem;
+    border-top: 1px solid var(--border);
+  }
+  .records-count {
+    font-size: 0.65rem;
+    color: var(--muted);
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .records-footer .login-cancel {
+    flex: 0 0 auto;
+    padding: 0.4rem 0.9rem;
+    font-size: 0.72rem;
+  }
+  @media (max-width: 600px) {
+    .records-box { padding: 1.1rem; max-height: 80vh; }
+  }
+
   /* Delete KML button in map list */
   .map-delete-btn {
     display: none;
@@ -2253,6 +2402,13 @@
           <path d="M1 6h14M6 1v14"/>
         </svg>
         <span class="sidebar-head-label">Mapas Cargados</span>
+        <button class="sidebar-records-btn admin-only" id="records-admin-btn" title="Gestionar registros de Google Sheets" aria-label="Gestionar registros">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 4h10M6 4V3a1 1 0 011-1h2a1 1 0 011 1v1M5 4v9a1 1 0 001 1h4a1 1 0 001-1V4"/>
+            <line x1="7" y1="7" x2="7" y2="11"/>
+            <line x1="9" y1="7" x2="9" y2="11"/>
+          </svg>
+        </button>
         <button class="sidebar-close" id="sidebar-close" aria-label="Cerrar panel">
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="4" y1="4" x2="12" y2="12"/>
@@ -2340,6 +2496,21 @@
     <div class="login-actions">
       <button class="login-cancel" id="login-cancel">Cancelar</button>
       <button class="login-submit" id="login-submit">Entrar</button>
+    </div>
+  </div>
+</div>
+
+<div class="login-modal" id="records-modal">
+  <div class="records-box">
+    <h3>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6h14z"/></svg>
+      Registros de Google Sheets
+    </h3>
+    <input type="text" id="records-search" placeholder="Buscar territorio, mapa o publicador...">
+    <div class="records-list" id="records-list"></div>
+    <div class="records-footer">
+      <span class="records-count" id="records-count"></span>
+      <button class="login-cancel" id="records-close">Cerrar</button>
     </div>
   </div>
 </div>
@@ -2542,6 +2713,147 @@ $loginPassword.addEventListener('keydown', (e) => {
 // Restore admin session
 if (localStorage.getItem('mapview-admin') === '1') {
   setAdminMode(true);
+}
+
+// ── RECORDS MANAGER (admin) ──
+const $recordsModal = document.getElementById('records-modal');
+const $recordsList = document.getElementById('records-list');
+const $recordsSearch = document.getElementById('records-search');
+const $recordsCount = document.getElementById('records-count');
+const $recordsAdminBtn = document.getElementById('records-admin-btn');
+const $recordsClose = document.getElementById('records-close');
+
+$recordsAdminBtn.addEventListener('click', () => {
+  $recordsSearch.value = '';
+  openRecordsModal();
+});
+
+$recordsClose.addEventListener('click', closeRecordsModal);
+
+$recordsModal.addEventListener('click', (e) => {
+  if (e.target === $recordsModal) closeRecordsModal();
+});
+
+$recordsSearch.addEventListener('input', () => renderRecordsList($recordsSearch.value.trim().toLowerCase()));
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && $recordsModal.classList.contains('active')) closeRecordsModal();
+});
+
+function openRecordsModal() {
+  $recordsModal.classList.add('active');
+  gsap.fromTo($recordsModal, { opacity: 0 }, { opacity: 1, duration: 0.3, ease: 'power2.out' });
+  gsap.fromTo('.records-box', { opacity: 0, scale: 0.94, y: 12 }, { opacity: 1, scale: 1, y: 0, duration: 0.4, ease: 'back.out(1.5)' });
+  fetchRecords().then(() => renderRecordsList($recordsSearch.value.trim().toLowerCase()));
+}
+
+function closeRecordsModal() {
+  gsap.to('.records-box', { opacity: 0, scale: 0.96, y: 8, duration: 0.2, ease: 'power2.in' });
+  gsap.to($recordsModal, {
+    opacity: 0,
+    duration: 0.25,
+    ease: 'power2.in',
+    onComplete: () => { $recordsModal.classList.remove('active'); }
+  });
+}
+
+function renderRecordsList(filter) {
+  filter = filter || '';
+  const all = sheetRecords.filter(r => r.territorio);
+
+  const visible = all.filter(r => {
+    if (!filter) return true;
+    return (r.territorio || '').toLowerCase().includes(filter) ||
+           (r.mapName || '').toLowerCase().includes(filter) ||
+           (r.publicador || '').toLowerCase().includes(filter);
+  });
+
+  if (visible.length === 0) {
+    $recordsList.innerHTML = `<div class="records-empty">No se encontraron registros${filter ? ' para "' + filter + '"' : ''}</div>`;
+    $recordsCount.textContent = `0 / ${all.length}`;
+    return;
+  }
+
+  const groups = {};
+  visible.forEach(r => {
+    const map = r.mapName || 'Sin mapa';
+    if (!groups[map]) groups[map] = [];
+    groups[map].push(r);
+  });
+
+  let html = '';
+  Object.keys(groups).sort().forEach(mapName => {
+    const mapData = loadedMaps.find(m => m.name === mapName);
+    const color = mapData ? mapData.color.solid : '#94a3b8';
+    html += `<div class="records-group-title"><span class="map-color-dot" style="background:${color};"></span> ${mapName} (${groups[mapName].length})</div>`;
+    groups[mapName].forEach(r => {
+      const f1 = formatRecordDate(r.fecha_inicio);
+      const f2 = formatRecordDate(r.fecha_fin);
+      const fechas = f2 ? `${f1} → ${f2}` : (f1 || 'Sin fecha');
+      html += `
+        <div class="records-item" data-terr="${(r.territorio || '').replace(/"/g, '&quot;')}" data-pub="${(r.publicador || '').replace(/"/g, '&quot;')}" data-fi="${(r.fecha_inicio || '').replace(/"/g, '&quot;')}" data-ff="${(r.fecha_fin || '').replace(/"/g, '&quot;')}">
+          <div class="records-item-info">
+            <span class="records-item-terr">${r.territorio}</span>
+            <span class="records-item-meta">${r.publicador || 'Sin publicador'} · ${fechas}</span>
+          </div>
+          <button class="records-item-del">Borrar</button>
+        </div>`;
+    });
+  });
+
+  $recordsList.innerHTML = html;
+  $recordsCount.textContent = `${visible.length} / ${all.length} registros`;
+
+  $recordsList.querySelectorAll('.records-item-del').forEach(btn => {
+    btn.addEventListener('click', () => deleteRecordFromList(btn));
+  });
+}
+
+function deleteRecordFromList(btn) {
+  const item = btn.closest('.records-item');
+  const terr = item.dataset.terr;
+  const pub = item.dataset.pub;
+  const fi = item.dataset.fi;
+  const ff = item.dataset.ff;
+
+  if (!confirm(`¿Borrar este registro de "${terr}"?\n\nPublicador: ${pub}\nSe eliminará de Google Sheets.`)) return;
+
+  btn.disabled = true;
+  btn.textContent = '...';
+
+  const payload = JSON.stringify({
+    action: 'deleteRecord',
+    publicador: pub,
+    fechaInicio: fi,
+    fechaFin: ff,
+    territorio: terr
+  });
+
+  fetch(`${GOOGLE_SHEETS_URL}?action=deleteRecord&d=${encodeURIComponent(payload)}`)
+    .then(r => r.json())
+    .then(data => {
+      if (data.status !== 'ok' || data.count === 0) throw new Error('not deleted');
+      sheetRecords = sheetRecords.filter(r2 => {
+        if ((r2.territorio || '') !== terr) return true;
+        if ((r2.publicador || '') !== pub) return true;
+        if ((r2.fecha_inicio || '') !== fi) return true;
+        if ((r2.fecha_fin || '') !== ff) return true;
+        return false;
+      });
+      saveRecordsToStorage();
+      buildRecordsMap();
+      renderAllPolygons();
+      renderBlockList();
+      renderMapList();
+      if (selectedBlockKey) renderDetailRecords();
+      showWorkflowToast('Registro borrado ✓', '🗑️', 3000);
+      renderRecordsList($recordsSearch.value.trim().toLowerCase());
+    })
+    .catch(() => {
+      btn.disabled = false;
+      btn.textContent = 'Borrar';
+      showWorkflowToast('No se pudo borrar. Intenta de nuevo.', '⚠️', 3000);
+    });
 }
 
 // ── KML PERSISTENCE (localStorage) ──
