@@ -6676,12 +6676,12 @@ const $cinAttr = document.getElementById('cin-attribution');
 const CIN_BTN_IDLE_HTML = $cinBtn.innerHTML;
 const CIN_BTN_STOP_HTML = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="6" height="6" rx="1"/></svg> Detener`;
 
-let cinActive = false, cinStarted = false, cinStopping = false, cinMode = null;
+let cinActive = false, cinPhase = null, cinStopping = false, cinMode = null;
 let cinRaf = 0, cinStart = 0, cinAngle = 0, cinDur = 0, cinRevs = 0;
 let cinZoomFrom = 0, cinZoomTo = 0;
 let cinSavedInteractions = null, cinSavedSnap = null;
 let cinStopStart = 0, cinStopFrom = 0, cinStopTo = 0;
-let cinMoveHandler = null, cinSafetyTimer = 0;
+let cinPanFrom = null, cinPanTo = null, cinPanStart = 0, cinPanDur = 0;
 
 function cinEaseInOut(t) { return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; }
 function cinEaseOut(t) { return 1 - Math.pow(1 - t, 3); }
@@ -6714,8 +6714,8 @@ function cinGetTarget() {
 function cinSpiralZoomEnd(z0) {
   const maxZ = map.getMaxZoom() || 18;
   const minZ = map.getMinZoom() || 0;
-  if (maxZ - z0 >= 1.5) return Math.min(z0 + 2, maxZ);
-  if (z0 - minZ >= 1.5) return Math.max(z0 - 2, minZ);
+  if (z0 < maxZ) return Math.min(z0 + 1, maxZ);
+  if (z0 > minZ) return Math.max(z0 - 1, minZ);
   return z0;
 }
 
@@ -6762,7 +6762,7 @@ function startCinematic(mode) {
     showWorkflowToast('Carga un mapa primero', '🗺', 2600);
     return;
   }
-  cinActive = true; cinStarted = false; cinStopping = false;
+  cinActive = true; cinPhase = null; cinStopping = false;
   cinMode = mode;
   cinAngle = 0;
   document.body.classList.add('cinematic-active');
@@ -6775,39 +6775,44 @@ function startCinematic(mode) {
   const target = cinGetTarget();
   cinZoomFrom = map.getZoom();
   cinZoomTo = mode === 'espiral' ? cinSpiralZoomEnd(cinZoomFrom) : cinZoomFrom;
-  cinRevs = 2;
-  cinDur = mode === 'espiral' ? 12000 : 10000;
+  cinRevs = 1;
+  cinDur = mode === 'espiral' ? 36000 : 30000;
   $cinAttr.innerHTML = map.hasLayer(vistaSatelital) ? 'Tiles &copy; Esri' : '&copy; OpenStreetMap';
   showWorkflowToast(mode === 'espiral' ? 'Vista Espiral activa — Esc para detener' : 'Vista Órbita activa — Esc para detener', mode === 'espiral' ? '🌀' : '🎬', 2600);
 
   const c = map.getCenter();
   const p1 = map.latLngToContainerPoint([c.lat, c.lng]);
   const p2 = map.latLngToContainerPoint(target);
-  if (Math.hypot(p1.x - p2.x, p1.y - p2.y) > 30) {
-    map.flyTo(target, map.getZoom(), { duration: 0.9 });
-    cinMoveHandler = () => beginCinLoop();
-    map.once('moveend', cinMoveHandler);
-    cinSafetyTimer = setTimeout(() => { if (cinActive && !cinStarted) beginCinLoop(); }, 1500);
+  const d = Math.hypot(p1.x - p2.x, p1.y - p2.y);
+  if (d > 30) {
+    cinPhase = 'pan';
+    cinPanFrom = [c.lat, c.lng];
+    cinPanTo = target;
+    cinPanStart = performance.now();
+    cinPanDur = Math.min(3000, Math.max(1200, 1200 + d * 1.5));
   } else {
-    beginCinLoop();
+    cinPhase = 'spin';
+    cinStart = performance.now();
   }
-}
-
-function beginCinLoop() {
-  if (!cinActive || cinStarted) return;
-  cinStarted = true;
-  if (cinMoveHandler) { map.off('moveend', cinMoveHandler); cinMoveHandler = null; }
-  if (cinSafetyTimer) { clearTimeout(cinSafetyTimer); cinSafetyTimer = 0; }
-  cinStart = performance.now();
   cinRaf = requestAnimationFrame(cinTick);
 }
 
 function cinTick(now) {
   if (!cinActive) return;
   if (cinStopping) {
-    const t = Math.min(1, (now - cinStopStart) / 450);
+    const t = Math.min(1, (now - cinStopStart) / 900);
     cinApply(cinStopFrom + (cinStopTo - cinStopFrom) * cinEaseOut(t));
     if (t >= 1) { cinCleanup('stop'); return; }
+    cinRaf = requestAnimationFrame(cinTick);
+    return;
+  }
+  if (cinPhase === 'pan') {
+    const t = Math.min(1, (now - cinPanStart) / cinPanDur);
+    const e = cinEaseInOut(t);
+    const lat = cinPanFrom[0] + (cinPanTo[0] - cinPanFrom[0]) * e;
+    const lng = cinPanFrom[1] + (cinPanTo[1] - cinPanFrom[1]) * e;
+    map.setView([lat, lng], map.getZoom(), { animate: false });
+    if (t >= 1) { cinPhase = 'spin'; cinStart = now; }
     cinRaf = requestAnimationFrame(cinTick);
     return;
   }
@@ -6824,7 +6829,7 @@ function cinTick(now) {
 
 function stopCinematic() {
   if (!cinActive || cinStopping) return;
-  if (!cinStarted) { cinCleanup('stop'); return; }
+  if (cinPhase !== 'spin') { cinCleanup('stop'); return; }
   const next = Math.round(cinAngle / 360) * 360;
   if (next === cinAngle) { cinCleanup('stop'); return; }
   cinStopping = true;
@@ -6839,10 +6844,7 @@ function cinCleanup(kind) {
   if (!cinActive) return;
   const label = cinMode === 'espiral' ? 'Vista Espiral' : 'Vista Órbita';
   cancelAnimationFrame(cinRaf); cinRaf = 0;
-  if (cinMoveHandler) { map.off('moveend', cinMoveHandler); cinMoveHandler = null; }
-  if (cinSafetyTimer) { clearTimeout(cinSafetyTimer); cinSafetyTimer = 0; }
-  if (!cinStarted) map.stop();
-  cinActive = false; cinStarted = false; cinStopping = false; cinMode = null;
+  cinActive = false; cinPhase = null; cinStopping = false; cinMode = null;
   cinAngle = 0;
   $cinMapEl.style.transform = '';
   $cinMapEl.style.transformOrigin = '';
