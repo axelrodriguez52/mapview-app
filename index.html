@@ -3052,6 +3052,20 @@ function deleteRecordFromList(btn) {
   btn.disabled = true;
   btn.textContent = '...';
 
+  const matches = r =>
+    (r.territorio || '') === terr &&
+    (r.publicador || '') === pub &&
+    (r.fecha_inicio || '') === fi &&
+    (r.fecha_fin || '') === ff;
+
+  // Borrado local inmediato (se revierte si el servidor no lo confirma)
+  const removed = sheetRecords.filter(matches);
+  sheetRecords = sheetRecords.filter(r => !matches(r));
+  saveRecordsToStorage();
+  buildRecordsMap();
+  refreshVisualsForTerritory(terr);
+  renderRecordsList($recordsSearch.value.trim().toLowerCase());
+
   const payload = JSON.stringify({
     action: 'deleteRecord',
     publicador: pub,
@@ -3060,30 +3074,20 @@ function deleteRecordFromList(btn) {
     territorio: terr
   });
 
-  fetch(`${GOOGLE_SHEETS_URL}?action=deleteRecord&d=${encodeURIComponent(payload)}`)
+  sheetFetch(`${GOOGLE_SHEETS_URL}?action=deleteRecord&d=${encodeURIComponent(payload)}`)
     .then(r => r.json())
     .then(data => {
       if (data.status !== 'ok' || data.count === 0) throw new Error('not deleted');
-      sheetRecords = sheetRecords.filter(r2 => {
-        if ((r2.territorio || '') !== terr) return true;
-        if ((r2.publicador || '') !== pub) return true;
-        if ((r2.fecha_inicio || '') !== fi) return true;
-        if ((r2.fecha_fin || '') !== ff) return true;
-        return false;
-      });
-      saveRecordsToStorage();
-      buildRecordsMap();
-      renderAllPolygons();
-      renderBlockList();
-      renderMapList();
-      if (selectedBlockKey) renderDetailRecords();
       showWorkflowToast('Registro borrado ✓', '🗑️', 3000);
-      renderRecordsList($recordsSearch.value.trim().toLowerCase());
+      fetchRecords(true);
     })
     .catch(() => {
-      btn.disabled = false;
-      btn.textContent = 'Borrar';
-      showWorkflowToast('No se pudo borrar. Intenta de nuevo.', '⚠️', 3000);
+      sheetRecords = sheetRecords.concat(removed);
+      saveRecordsToStorage();
+      buildRecordsMap();
+      refreshVisualsForTerritory(terr);
+      renderRecordsList($recordsSearch.value.trim().toLowerCase());
+      showWorkflowToast('No se pudo borrar. Intenta de nuevo.', '⚠️', 3500);
     });
 }
 
@@ -3248,7 +3252,7 @@ function loadRecordsFromStorage() {
   return false;
 }
 
-function fetchRecords() {
+function fetchRecords(silent) {
   return fetch(`${GOOGLE_SHEETS_URL}?action=getRecords`)
     .then(r => r.json())
     .then(data => {
@@ -3256,6 +3260,8 @@ function fetchRecords() {
       buildRecordsMap();
       recordsLoaded = true;
       saveRecordsToStorage();
+
+      if (silent) return;
 
       if (loadedMaps.length > 0) {
         renderAllPolygons();
@@ -4011,6 +4017,20 @@ function restoreSelectionStyles() {
   if (item) item.classList.add('active');
 }
 
+function polygonTooltipHtml(blockName, mapName, vc, visitInfo) {
+  let content = `<div style="font-weight:600;margin-bottom:2px;">${blockName}</div>`;
+  content += `<div style="font-size:0.6rem;opacity:0.7;">${mapName}</div>`;
+  const statusDot = `<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${vc.css};margin-right:4px;vertical-align:middle;"></span>`;
+  content += `<div style="margin-top:3px;padding-top:3px;border-top:1px solid rgba(255,255,255,0.15);font-size:0.58rem;color:${vc.css};">${statusDot}${vc.label}</div>`;
+  if (visitInfo.lastDate) {
+    const displayDate = visitInfo.lastDate.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
+    content += `<div style="font-size:0.55rem;opacity:0.6;margin-top:1px;">Ultima visita: ${displayDate}</div>`;
+  } else {
+    content += `<div style="font-size:0.55rem;opacity:0.6;margin-top:1px;">Sin registro de visita</div>`;
+  }
+  return content;
+}
+
 function renderAllPolygons() {
   polygonLayerGroup.clearLayers();
   polygonRefs = {};
@@ -4047,17 +4067,7 @@ function renderAllPolygons() {
       const blockName = block.name;
       const mapName = mapData.name;
       polygon.bindTooltip(function() {
-        let content = `<div style="font-weight:600;margin-bottom:2px;">${blockName}</div>`;
-        content += `<div style="font-size:0.6rem;opacity:0.7;">${mapName}</div>`;
-        const statusDot = `<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${vc.css};margin-right:4px;vertical-align:middle;"></span>`;
-        content += `<div style="margin-top:3px;padding-top:3px;border-top:1px solid rgba(255,255,255,0.15);font-size:0.58rem;color:${vc.css};">${statusDot}${vc.label}</div>`;
-        if (visitInfo.lastDate) {
-          const displayDate = visitInfo.lastDate.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
-          content += `<div style="font-size:0.55rem;opacity:0.6;margin-top:1px;">Ultima visita: ${displayDate}</div>`;
-        } else {
-          content += `<div style="font-size:0.55rem;opacity:0.6;margin-top:1px;">Sin registro de visita</div>`;
-        }
-        return content;
+        return polygonTooltipHtml(blockName, mapName, vc, visitInfo);
       }, { sticky: true, className: 'custom-tooltip', direction: 'top', opacity: 1 });
       polygon.on('click', () => {
         const key = { mapId: mapData.id, localId: block.localId };
@@ -4173,19 +4183,7 @@ function updatePolygonColors() {
     }
     const blockName = block.name;
     const mapName = mapData.name;
-    polygon.setTooltipContent(function() {
-      let content = `<div style="font-weight:600;margin-bottom:2px;">${blockName}</div>`;
-      content += `<div style="font-size:0.6rem;opacity:0.7;">${mapName}</div>`;
-      const statusDot = `<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${vc.css};margin-right:4px;vertical-align:middle;"></span>`;
-      content += `<div style="margin-top:3px;padding-top:3px;border-top:1px solid rgba(255,255,255,0.15);font-size:0.58rem;color:${vc.css};">${statusDot}${vc.label}</div>`;
-      if (visitInfo.lastDate) {
-        const displayDate = visitInfo.lastDate.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
-        content += `<div style="font-size:0.55rem;opacity:0.6;margin-top:1px;">Ultima visita: ${displayDate}</div>`;
-      } else {
-        content += `<div style="font-size:0.55rem;opacity:0.6;margin-top:1px;">Sin registro de visita</div>`;
-      }
-      return content;
-    });
+    polygon.setTooltipContent(polygonTooltipHtml(blockName, mapName, vc, visitInfo));
   }
   if (changed) {
     renderBlockList();
@@ -4195,10 +4193,68 @@ function updatePolygonColors() {
   }
 }
 
+function refreshBlockVisual(mapId, localId) {
+  const refKey = `${mapId}-${localId}`;
+  const polygon = polygonRefs[refKey];
+  const mapData = loadedMaps.find(m => m.id === mapId);
+  const block = mapData && mapData.blocks.find(b => b.localId === localId);
+
+  if (block && polygon) {
+    const visitInfo = getVisitStatusInfo(block.name);
+    const vc = visitInfo.colors;
+    polygon._visitStatus = visitInfo.status;
+    polygon._visitIcon = visitInfo.visitIcon;
+    polygon.setStyle({ fillColor: vc.fill, fillOpacity: 0.28, color: vc.stroke, weight: 1.5 });
+    const el = polygon.getElement();
+    if (el) {
+      el.style.fill = vc.fill;
+      el.style.stroke = vc.stroke;
+    }
+    polygon.setTooltipContent(polygonTooltipHtml(block.name, mapData.name, vc, visitInfo));
+    const labelInfo = labelRefs[refKey];
+    if (labelInfo) {
+      labelInfo.visitIcon = visitInfo.visitIcon;
+      labelInfo.vc = vc;
+      labelInfo.marker.setIcon(buildCenterLabelIcon(visitInfo.visitIcon, vc, block.name, labelInfo.size || 14));
+    }
+  }
+
+  const item = document.querySelector(`.block-item[data-map-id="${mapId}"][data-local-id="${localId}"]`);
+  if (item && block) {
+    const pip = item.querySelector('.block-color-pip');
+    if (pip) pip.style.background = getVisitStatusInfo(block.name).colors.css;
+  }
+
+  renderMapList(true);
+  updateStats();
+  if (selectedBlockKey) renderDetailRecords();
+  requestAnimationFrame(restoreSelectionStyles);
+}
+
+function refreshVisualsForTerritory(territorio) {
+  const key = normalizeTerritoryName(territorio || '');
+  let matched = false;
+  if (key) {
+    loadedMaps.forEach(m => {
+      m.blocks.forEach(b => {
+        if (normalizeTerritoryName(b.name) === key) {
+          matched = true;
+          refreshBlockVisual(m.id, b.localId);
+        }
+      });
+    });
+  }
+  if (!matched) {
+    renderMapList(true);
+    updateStats();
+    if (selectedBlockKey) renderDetailRecords();
+  }
+}
+
 setInterval(updatePolygonColors, 60000);
 map.on('zoomend', updateCenterLabelSizes);
 
-function renderMapList() {
+function renderMapList(skipAnimation) {
   const list = $mapList;
 
   if (loadedMaps.length === 0) {
@@ -4298,16 +4354,18 @@ function renderMapList() {
   });
   list.appendChild(fragment);
 
-  gsap.fromTo($mapList.querySelectorAll('.map-item'), {
-    opacity: 0,
-    x: -8
-  }, {
-    opacity: 1,
-    x: 0,
-    duration: 0.35,
-    stagger: 0.04,
-    ease: 'power3.out'
-  });
+  if (!skipAnimation) {
+    gsap.fromTo($mapList.querySelectorAll('.map-item'), {
+      opacity: 0,
+      x: -8
+    }, {
+      opacity: 1,
+      x: 0,
+      duration: 0.35,
+      stagger: 0.04,
+      ease: 'power3.out'
+    });
+  }
 }
 
 function renderBlockList() {
@@ -4353,14 +4411,15 @@ function renderBlockList() {
   });
   list.appendChild(fragment);
 
-  gsap.fromTo($blockList.querySelectorAll('.block-item'), {
+  const blockItems = $blockList.querySelectorAll('.block-item');
+  gsap.fromTo(blockItems, {
     opacity: 0,
     x: -12
   }, {
     opacity: 1,
     x: 0,
     duration: 0.4,
-    stagger: 0.03,
+    stagger: Math.min(0.03, 0.5 / Math.max(blockItems.length, 1)),
     ease: 'power3.out'
   });
 }
@@ -4646,6 +4705,12 @@ function queueRecord(payload) {
   savePendingRecords(pending);
 }
 
+function sheetFetch(url, timeoutMs) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs || 15000);
+  return fetch(url, { signal: controller.signal }).finally(() => clearTimeout(timer));
+}
+
 function syncPendingRecords() {
   const pending = getPendingRecords();
   if (pending.length === 0) return;
@@ -4669,7 +4734,7 @@ function syncPendingRecords() {
     }
     const rec = pending[i];
     const p = JSON.stringify(rec);
-    fetch(`${GOOGLE_SHEETS_URL}?action=addRecord&d=${encodeURIComponent(p)}`)
+    sheetFetch(`${GOOGLE_SHEETS_URL}?action=addRecord&d=${encodeURIComponent(p)}`)
       .then(r => r.json())
       .then(d => { if (d.status === 'ok') synced++; else { remaining.push(rec); failed++; } })
       .catch(() => { remaining.push(rec); failed++; })
@@ -4711,67 +4776,56 @@ function saveToSheet() {
   statusEl.className = 'save-status';
   statusEl.textContent = '';
 
+  const territorio = block.name.replace(/\s*\(\d+\)\s*$/, '');
   const payload = {
     action: 'addRecord',
     publicador: publisher,
-    territorio: block.name.replace(/\s*\(\d+\)\s*$/, ''),
+    territorio: territorio,
     mapName: mapData.name,
     fechaInicio: dateStart || '',
     fechaFin: dateEnd || ''
   };
 
-  const p = JSON.stringify(payload);
+  // Aplicación local inmediata: la interfaz responde sin esperar a Google Sheets
+  sheetRecords.push({
+    publicador: publisher,
+    territorio: territorio,
+    mapName: mapData.name,
+    fecha_inicio: dateStart || '',
+    fecha_fin: dateEnd || ''
+  });
+  buildRecordsMap();
+  saveRecordsToStorage();
+  refreshBlockVisual(mapData.id, block.localId);
+  statusEl.textContent = 'Guardando en Google Sheets...';
 
   if (!navigator.onLine) {
     queueRecord(payload);
     statusEl.className = 'save-status success';
     statusEl.textContent = 'Guardado offline. Se sincronizará al conectar.';
     btn.disabled = false;
-    btn.innerHTML = `
-      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M13 2H3a1 1 0 00-1 1v10a1 1 0 001 1h10a1 1 0 001-1V3a1 1 0 00-1-1z"/>
-        <path d="M5 8l2 2 4-4"/>
-      </svg>
-      Grabar en Sheets`;
+    btn.innerHTML = SAVE_BTN_DEFAULT_HTML;
     updatePendingBadge();
     return;
   }
 
-  fetch(`${GOOGLE_SHEETS_URL}?action=addRecord&d=${encodeURIComponent(p)}`)
+  sheetFetch(`${GOOGLE_SHEETS_URL}?action=addRecord&d=${encodeURIComponent(JSON.stringify(payload))}`)
     .then(r => r.json())
     .then(data => {
-      if (data.status === 'ok') {
-        statusEl.className = 'save-status success';
-        statusEl.textContent = 'Guardado correctamente en Google Sheets.';
-        fetchRecords();
-      } else {
-        throw new Error('Server error');
-      }
+      if (data.status !== 'ok') throw new Error('Server error');
+      statusEl.className = 'save-status success';
+      statusEl.textContent = 'Guardado correctamente en Google Sheets.';
+      fetchRecords(true);
     })
     .catch(() => {
       queueRecord(payload);
-      sheetRecords.push({
-        publicador: publisher,
-        territorio: block.name.replace(/\s*\(\d+\)\s*$/, ''),
-        mapName: mapData.name,
-        fecha_inicio: dateStart || '',
-        fecha_fin: dateEnd || ''
-      });
-      buildRecordsMap();
-      renderAllPolygons();
-      renderBlockList();
       statusEl.className = 'save-status success';
       statusEl.textContent = 'Guardado offline. Se sincronizará al conectar.';
       updatePendingBadge();
     })
     .finally(() => {
       btn.disabled = false;
-      btn.innerHTML = `
-        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M13 2H3a1 1 0 00-1 1v10a1 1 0 001 1h10a1 1 0 001-1V3a1 1 0 00-1-1z"/>
-          <path d="M5 8l2 2 4-4"/>
-        </svg>
-        Grabar en Sheets`;
+      btn.innerHTML = SAVE_BTN_DEFAULT_HTML;
     });
 }
 
@@ -4799,53 +4853,72 @@ function updateRecord() {
   statusEl.className = 'save-status';
   statusEl.textContent = '';
 
+  if (!navigator.onLine) {
+    statusEl.className = 'save-status error';
+    statusEl.textContent = 'No hay conexión. Intenta más tarde.';
+    btn.disabled = false;
+    btn.innerHTML = SAVE_BTN_UPDATE_HTML;
+    return;
+  }
+
+  const territorio = block.name.replace(/\s*\(\d+\)\s*$/, '');
   const payload = {
     action: 'updateRecord',
     publicador: publisher,
-    territorio: block.name.replace(/\s*\(\d+\)\s*$/, ''),
+    territorio: territorio,
     mapName: mapData.name,
     fechaInicio: dateStart || '',
     fechaFin: dateEnd || ''
   };
 
-  const p = JSON.stringify(payload);
+  // Aplicación local inmediata (el script actualiza todas las filas del territorio)
+  const affected = sheetRecords.filter(r => (r.territorio || '') === territorio);
+  const previous = affected.map(r => ({
+    ref: r,
+    publicador: r.publicador,
+    fecha_inicio: r.fecha_inicio,
+    fecha_fin: r.fecha_fin,
+    mapName: r.mapName
+  }));
+  affected.forEach(r => {
+    r.publicador = publisher;
+    r.fecha_inicio = dateStart || '';
+    r.fecha_fin = dateEnd || '';
+    r.mapName = mapData.name;
+  });
+  buildRecordsMap();
+  saveRecordsToStorage();
+  refreshBlockVisual(mapData.id, block.localId);
+  statusEl.textContent = 'Actualizando en Google Sheets...';
 
-  if (!navigator.onLine) {
-    statusEl.className = 'save-status error';
-    statusEl.textContent = 'No hay conexión. Intenta más tarde.';
-    btn.disabled = false;
-    btn.innerHTML = `
-      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M13 2H3a1 1 0 00-1 1v10a1 1 0 001 1h10a1 1 0 001-1V3a1 1 0 00-1-1z"/>
-        <path d="M5 8l2 2 4-4"/>
-      </svg>
-      Actualizar registro`;
-    return;
+  function rollback() {
+    previous.forEach(v => {
+      v.ref.publicador = v.publicador;
+      v.ref.fecha_inicio = v.fecha_inicio;
+      v.ref.fecha_fin = v.fecha_fin;
+      v.ref.mapName = v.mapName;
+    });
+    buildRecordsMap();
+    saveRecordsToStorage();
+    refreshBlockVisual(mapData.id, block.localId);
   }
 
-  fetch(`${GOOGLE_SHEETS_URL}?action=updateRecord&d=${encodeURIComponent(p)}`)
+  sheetFetch(`${GOOGLE_SHEETS_URL}?action=updateRecord&d=${encodeURIComponent(JSON.stringify(payload))}`)
     .then(r => r.json())
     .then(data => {
-      if (data.status === 'ok') {
-        statusEl.className = 'save-status success';
-        statusEl.textContent = 'Registro actualizado correctamente.';
-        fetchRecords();
-      } else {
-        throw new Error('Server error');
-      }
+      if (data.status !== 'ok') throw new Error('Server error');
+      statusEl.className = 'save-status success';
+      statusEl.textContent = 'Registro actualizado correctamente.';
+      fetchRecords(true);
     })
     .catch(() => {
+      rollback();
       statusEl.className = 'save-status error';
       statusEl.textContent = 'Error al actualizar. Verifica tu conexión.';
     })
     .finally(() => {
       btn.disabled = false;
-      btn.innerHTML = `
-        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M13 2H3a1 1 0 00-1 1v10a1 1 0 001 1h10a1 1 0 001-1V3a1 1 0 00-1-1z"/>
-          <path d="M5 8l2 2 4-4"/>
-        </svg>
-        Actualizar registro`;
+      btn.innerHTML = SAVE_BTN_UPDATE_HTML;
     });
 }
 
@@ -4912,6 +4985,12 @@ const SAVE_BTN_FINAL_HTML = `
       <path d="M5 8l2 2 4-4"/>
     </svg>
     Guardar fecha finalización`;
+const SAVE_BTN_UPDATE_HTML = `
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M13 2H3a1 1 0 00-1 1v10a1 1 0 001 1h10a1 1 0 001-1V3a1 1 0 00-1-1z"/>
+      <path d="M5 8l2 2 4-4"/>
+    </svg>
+    Actualizar registro`;
 
 function enterCompletionMode(rec) {
   if (!rec) return;
@@ -5036,7 +5115,7 @@ function completeRecord() {
   statusEl.textContent = '';
 
   function attemptDelete(retries) {
-    return fetch(`${GOOGLE_SHEETS_URL}?action=deleteRecord&d=${encodeURIComponent(JSON.stringify(delPayload))}`)
+    return sheetFetch(`${GOOGLE_SHEETS_URL}?action=deleteRecord&d=${encodeURIComponent(JSON.stringify(delPayload))}`)
       .then(r => r.json())
       .then(d => {
         if (d && d.status === 'ok' && d.count > 0) return true;
@@ -5064,9 +5143,8 @@ function completeRecord() {
     });
     buildRecordsMap();
     saveRecordsToStorage();
-    renderAllPolygons();
-    renderBlockList();
-    renderDetailRecords();
+    refreshBlockVisual(found.mapData.id, found.block.localId);
+    if (selectedBlockKey) renderDetailRecords();
   }
 
   attemptDelete(2)
@@ -5078,7 +5156,7 @@ function completeRecord() {
         }
         return;
       }
-      return fetch(`${GOOGLE_SHEETS_URL}?action=addRecord&d=${encodeURIComponent(JSON.stringify(addPayload))}`)
+      return sheetFetch(`${GOOGLE_SHEETS_URL}?action=addRecord&d=${encodeURIComponent(JSON.stringify(addPayload))}`)
         .then(r => r.json())
         .then(d => {
           if (!d || d.status !== 'ok') throw new Error('add failed');
@@ -5110,7 +5188,7 @@ function completeRecord() {
         }
         showWorkflowToast('Territorio completado ✓', '✅', 3000);
       }
-      fetchRecords();
+      fetchRecords(true);
     })
     .catch(() => {
       if (completionRecord === rec) {
@@ -5135,6 +5213,19 @@ function deleteSingleRecord(publicador, fechaInicio, fechaFin, territorio) {
   statusEl.className = 'save-status';
   statusEl.textContent = 'Borrando...';
 
+  const matches = r =>
+    (r.territorio || '') === territorio &&
+    (r.publicador || '') === publicador &&
+    (r.fecha_inicio || '') === fechaInicio &&
+    (r.fecha_fin || '') === fechaFin;
+
+  // Borrado local inmediato (se revierte si el servidor no lo confirma)
+  const removed = sheetRecords.filter(matches);
+  sheetRecords = sheetRecords.filter(r => !matches(r));
+  saveRecordsToStorage();
+  buildRecordsMap();
+  if (selectedBlockKey) refreshBlockVisual(selectedBlockKey.mapId, selectedBlockKey.localId);
+
   const payload = JSON.stringify({
     action: 'deleteRecord',
     publicador: publicador,
@@ -5143,7 +5234,7 @@ function deleteSingleRecord(publicador, fechaInicio, fechaFin, territorio) {
     territorio: territorio
   });
 
-  fetch(`${GOOGLE_SHEETS_URL}?action=deleteRecord&d=${encodeURIComponent(payload)}`)
+  sheetFetch(`${GOOGLE_SHEETS_URL}?action=deleteRecord&d=${encodeURIComponent(payload)}`)
     .then(r => r.json())
     .then(data => {
       if (data.status === 'ok' && data.count > 0) {
@@ -5154,28 +5245,19 @@ function deleteSingleRecord(publicador, fechaInicio, fechaFin, territorio) {
             (completionRecord.fecha_fin || '') === fechaFin) {
           clearCompletionState();
         }
-        sheetRecords = sheetRecords.filter(r2 => {
-          if ((r2.territorio || '') !== territorio) return true;
-          if ((r2.publicador || '') !== publicador) return true;
-          if ((r2.fecha_inicio || '') !== fechaInicio) return true;
-          if ((r2.fecha_fin || '') !== fechaFin) return true;
-          return false;
-        });
-        saveRecordsToStorage();
-        buildRecordsMap();
-        renderAllPolygons();
-        renderBlockList();
-        renderMapList();
-        updateStats();
-        renderDetailRecords();
         statusEl.className = 'save-status success';
         statusEl.textContent = 'Registro borrado. Ya puedes registrar uno nuevo.';
         showWorkflowToast('Registro borrado ✓', '🗑️', 3000);
+        fetchRecords(true);
       } else {
         throw new Error('Server error');
       }
     })
     .catch(() => {
+      sheetRecords = sheetRecords.concat(removed);
+      saveRecordsToStorage();
+      buildRecordsMap();
+      if (selectedBlockKey) refreshBlockVisual(selectedBlockKey.mapId, selectedBlockKey.localId);
       statusEl.className = 'save-status error';
       statusEl.textContent = 'No se pudo borrar. Intenta de nuevo.';
     });
@@ -6446,6 +6528,15 @@ if (!navigator.onLine) {
 
 updatePendingBadge();
 if (navigator.onLine && getPendingRecords().length > 0) syncPendingRecords();
+
+// ── MANTENER TIBIO APPS SCRIPT (evita arrancar frío de 2-6 s en cada guardado) ──
+function pingSheetsBackend() {
+  if (!navigator.onLine) return;
+  fetch(`${GOOGLE_SHEETS_URL}?action=getPassword`).then(r => r.text()).catch(() => {});
+}
+pingSheetsBackend();
+setInterval(pingSheetsBackend, 4 * 60 * 1000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) pingSheetsBackend(); });
 
 // ── GSAP BUTTON PRESS FEEDBACK ──
 document.addEventListener('mousedown', (e) => {
