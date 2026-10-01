@@ -448,6 +448,28 @@
     white-space: nowrap;
     pointer-events: none;
   }
+  .plc-stack {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 140px;
+    line-height: 1;
+    pointer-events: none;
+  }
+  .plc-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    border-radius: 50%;
+    font-weight: 700;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.55);
+  }
+  .plc-name {
+    margin-top: 2px;
+    white-space: nowrap;
+    font-weight: 600;
+  }
   #map-container.satellite-active .map-label {
     color: rgba(250,204,21,0.95);
     text-shadow: 0 0 6px rgba(0,0,0,0.9);
@@ -3839,6 +3861,142 @@ function renderAll() {
   resetDetail();
 }
 
+function polygonCentroid(pts) {
+  let a = 0, cx = 0, cy = 0;
+  const n = pts.length;
+  for (let i = 0; i < n; i++) {
+    const p1 = pts[i], p2 = pts[(i + 1) % n];
+    const cross = p1[0] * p2[1] - p2[0] * p1[1];
+    a += cross;
+    cx += (p1[0] + p2[0]) * cross;
+    cy += (p1[1] + p2[1]) * cross;
+  }
+  if (Math.abs(a) < 1e-12) return null;
+  return [cx / (3 * a), cy / (3 * a)];
+}
+
+function pointInPolygon(pt, poly) {
+  const x = pt[1], y = pt[0];
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const xi = poly[i][1], yi = poly[i][0];
+    const xj = poly[j][1], yj = poly[j][0];
+    if (((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi)) inside = !inside;
+  }
+  return inside;
+}
+
+function distToSegment2(p, a, b) {
+  const dx = b[1] - a[1], dy = b[0] - a[0];
+  const len2 = dx * dx + dy * dy;
+  let t = len2 ? ((p[1] - a[1]) * dx + (p[0] - a[0]) * dy) / len2 : 0;
+  t = Math.max(0, Math.min(1, t));
+  const ex = a[1] + t * dx - p[1], ey = a[0] + t * dy - p[0];
+  return Math.sqrt(ex * ex + ey * ey);
+}
+
+function minEdgeDistance(p, poly) {
+  let m = Infinity;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const d = distToSegment2(p, poly[i], poly[j]);
+    if (d < m) m = d;
+  }
+  return m;
+}
+
+function getPolygonInteriorPoint(latlngs) {
+  if (!latlngs || latlngs.length === 0) return [0, 0];
+  if (latlngs.length < 3) return latlngs[0];
+  const c = polygonCentroid(latlngs);
+  if (c && pointInPolygon(c, latlngs)) return c;
+  let minLat = Infinity, maxLat = -Infinity, minLng = Infinity, maxLng = -Infinity;
+  latlngs.forEach(p => {
+    if (p[0] < minLat) minLat = p[0];
+    if (p[0] > maxLat) maxLat = p[0];
+    if (p[1] < minLng) minLng = p[1];
+    if (p[1] > maxLng) maxLng = p[1];
+  });
+  let best = null, bestD = -1;
+  const N = 24;
+  for (let i = 0; i <= N; i++) {
+    for (let j = 0; j <= N; j++) {
+      const p = [minLat + (maxLat - minLat) * i / N, minLng + (maxLng - minLng) * j / N];
+      if (!pointInPolygon(p, latlngs)) continue;
+      const d = minEdgeDistance(p, latlngs);
+      if (d > bestD) { bestD = d; best = p; }
+    }
+  }
+  if (best) return best;
+  if (c) return c;
+  return [(minLat + maxLat) / 2, (minLng + maxLng) / 2];
+}
+
+function buildCenterLabelHtml(visitIcon, vc, name, iconPx) {
+  const fs = Math.max(8, Math.round(iconPx * 0.56));
+  const base = `width:${iconPx}px;height:${iconPx}px;font-size:${fs}px;`;
+  let badge;
+  if (visitIcon === 'check') {
+    badge = `<span class="plc-icon" style="${base}background:#10b981;color:#fff;" title="Con fecha de finalización">✓</span>`;
+  } else if (visitIcon === 'question') {
+    badge = `<span class="plc-icon" style="${base}background:#f59e0b;color:#000;" title="Sin fecha de finalización">?</span>`;
+  } else if (visitIcon === 'alert') {
+    badge = `<span class="plc-icon" style="${base}background:#ef4444;color:#fff;" title="Sin trabajar">!</span>`;
+  } else {
+    badge = `<span class="plc-icon" style="${base}visibility:hidden;"></span>`;
+  }
+  return `<div class="plc-stack">${badge}<span class="plc-name" style="color:${vc.stroke}">${name}</span></div>`;
+}
+
+function buildCenterLabelIcon(visitIcon, vc, name, iconPx) {
+  return L.divIcon({
+    className: 'map-label',
+    html: buildCenterLabelHtml(visitIcon, vc, name, iconPx),
+    iconSize: [140, iconPx + 24],
+    iconAnchor: [70, Math.round(iconPx / 2)]
+  });
+}
+
+function calcCenterIconPx(poly) {
+  try {
+    const b = poly.getBounds();
+    const p1 = map.latLngToContainerPoint(b.getNorthEast());
+    const p2 = map.latLngToContainerPoint(b.getSouthWest());
+    const minDim = Math.min(Math.abs(p1.x - p2.x), Math.abs(p1.y - p2.y));
+    return Math.max(9, Math.min(18, Math.round(minDim * 0.4)));
+  } catch (e) {
+    return 14;
+  }
+}
+
+function updateCenterLabelSizes() {
+  for (const refKey in labelRefs) {
+    const info = labelRefs[refKey];
+    if (!info.poly) continue;
+    const iconPx = calcCenterIconPx(info.poly);
+    if (iconPx === info.size) continue;
+    info.size = iconPx;
+    info.marker.setIcon(buildCenterLabelIcon(info.visitIcon, info.vc, info.name, iconPx));
+  }
+}
+
+function restoreSelectionStyles() {
+  if (!selectedBlockKey) return;
+  const found = findBlockByKey(selectedBlockKey);
+  if (found) {
+    const poly = getPolygonRef(selectedBlockKey);
+    const el = poly && poly.getElement();
+    if (el) {
+      const v = getVisitStatusInfo(found.block.name);
+      el.style.fill = v.colors.fill;
+      el.style.stroke = '#ffffff';
+      el.classList.add('active-poly');
+    }
+  }
+  document.querySelectorAll('.block-item.active').forEach(el => el.classList.remove('active'));
+  const item = document.querySelector(`.block-item[data-map-id="${selectedBlockKey.mapId}"][data-local-id="${selectedBlockKey.localId}"]`);
+  if (item) item.classList.add('active');
+}
+
 function renderAllPolygons() {
   polygonLayerGroup.clearLayers();
   polygonRefs = {};
@@ -3939,27 +4097,29 @@ function renderAllPolygons() {
       const refKey = `${mapData.id}-${block.localId}`;
       polygonRefs[refKey] = polygon;
 
-      const center = polygon.getBounds().getCenter();
-      let visitBadge = '';
-      if (visitInfo.visitIcon === 'check') {
-        visitBadge = `<span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#10b981;color:#fff;font-size:0.55rem;font-weight:700;margin-right:3px;vertical-align:middle;" title="Con fecha de finalización">✓</span>`;
-      } else if (visitInfo.visitIcon === 'question') {
-        visitBadge = `<span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#f59e0b;color:#000;font-size:0.55rem;font-weight:700;margin-right:3px;vertical-align:middle;" title="Sin fecha de finalización">?</span>`;
-      } else if (visitInfo.visitIcon === 'alert') {
-        visitBadge = `<span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#ef4444;color:#fff;font-size:0.55rem;font-weight:700;margin-right:3px;vertical-align:middle;" title="Sin trabajar">!</span>`;
-      }
-      const labelIcon = L.divIcon({
-        className: 'map-label',
-        html: `${visitBadge}<span style="color:${vc.stroke}">${block.name}</span>`,
-        iconSize: [120, 20]
+      const center = getPolygonInteriorPoint(block.latlngs);
+      const iconPx = calcCenterIconPx(polygon);
+      const labelMarker = L.marker(center, {
+        interactive: false,
+        keyboard: false,
+        icon: buildCenterLabelIcon(visitInfo.visitIcon, vc, block.name, iconPx)
       });
-      const labelMarker = L.marker(center, { icon: labelIcon, interactive: false });
       layers.push(labelMarker);
-      labelRefs[`${mapData.id}-${block.localId}`] = { marker: labelMarker, name: block.name, mapName: mapData.name, color: vc.stroke };
+      labelRefs[refKey] = {
+        marker: labelMarker,
+        name: block.name,
+        mapName: mapData.name,
+        color: vc.stroke,
+        poly: polygon,
+        visitIcon: visitInfo.visitIcon,
+        vc: vc,
+        size: iconPx
+      };
     });
   });
 
   layers.forEach(l => l.addTo(polygonLayerGroup));
+  requestAnimationFrame(restoreSelectionStyles);
 }
 
 function updatePolygonColors() {
@@ -3993,19 +4153,9 @@ function updatePolygonColors() {
     }
     const labelInfo = labelRefs[refKey];
     if (labelInfo) {
-      let badge = '';
-      if (visitInfo.visitIcon === 'check') {
-        badge = `<span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#10b981;color:#fff;font-size:0.55rem;font-weight:700;margin-right:3px;vertical-align:middle;">✓</span>`;
-      } else if (visitInfo.visitIcon === 'question') {
-        badge = `<span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#f59e0b;color:#000;font-size:0.55rem;font-weight:700;margin-right:3px;vertical-align:middle;">?</span>`;
-      } else if (visitInfo.visitIcon === 'alert') {
-        badge = `<span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#ef4444;color:#fff;font-size:0.55rem;font-weight:700;margin-right:3px;vertical-align:middle;">!</span>`;
-      }
-      labelInfo.marker.setIcon(L.divIcon({
-        className: 'map-label',
-        html: `${badge}<span style="color:${vc.stroke}">${block.name}</span>`,
-        iconSize: [120, 20]
-      }));
+      labelInfo.visitIcon = visitInfo.visitIcon;
+      labelInfo.vc = vc;
+      labelInfo.marker.setIcon(buildCenterLabelIcon(visitInfo.visitIcon, vc, block.name, labelInfo.size || 14));
     }
     const blockName = block.name;
     const mapName = mapData.name;
@@ -4027,10 +4177,12 @@ function updatePolygonColors() {
     renderBlockList();
     renderMapList();
     updateStats();
+    requestAnimationFrame(restoreSelectionStyles);
   }
 }
 
 setInterval(updatePolygonColors, 60000);
+map.on('zoomend', updateCenterLabelSizes);
 
 function renderMapList() {
   const list = $mapList;
@@ -4971,7 +5123,7 @@ function deleteSingleRecord(publicador, fechaInicio, fechaFin, territorio) {
   fetch(`${GOOGLE_SHEETS_URL}?action=deleteRecord&d=${encodeURIComponent(payload)}`)
     .then(r => r.json())
     .then(data => {
-      if (data.status === 'ok') {
+      if (data.status === 'ok' && data.count > 0) {
         if (completionRecord &&
             (completionRecord.territorio || '') === territorio &&
             (completionRecord.publicador || '') === publicador &&
@@ -4986,9 +5138,13 @@ function deleteSingleRecord(publicador, fechaInicio, fechaFin, territorio) {
           if ((r2.fecha_fin || '') !== fechaFin) return true;
           return false;
         });
+        saveRecordsToStorage();
         buildRecordsMap();
         renderAllPolygons();
         renderBlockList();
+        renderMapList();
+        updateStats();
+        renderDetailRecords();
         statusEl.className = 'save-status success';
         statusEl.textContent = 'Registro borrado. Ya puedes registrar uno nuevo.';
         showWorkflowToast('Registro borrado ✓', '🗑️', 3000);
@@ -5949,14 +6105,8 @@ async function drawMapCanvas(mapData) {
 
   mapData.blocks.forEach(block => {
     const visitInfo = getVisitStatusInfo(block.name);
-    let cx = 0, cy = 0;
-    block.latlngs.forEach(([lat, lng]) => {
-      const [px, py] = project(lat, lng);
-      cx += px;
-      cy += py;
-    });
-    cx /= block.latlngs.length;
-    cy /= block.latlngs.length;
+    const cp = getPolygonInteriorPoint(block.latlngs);
+    const [cx, cy] = project(cp[0], cp[1]);
 
     let icon = '';
     let iconBg = '';
