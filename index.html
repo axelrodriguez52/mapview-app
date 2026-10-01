@@ -256,54 +256,6 @@
   }
   #map { width: 100%; height: 100%; }
 
-  /* ── VISTAS CINEMÁTICAS (Órbita / Espiral) ── */
-  #cin-menu {
-    position: fixed;
-    z-index: 3000;
-    display: none;
-    flex-direction: column;
-    gap: 2px;
-    min-width: 215px;
-    padding: 6px;
-    background: var(--surface);
-    border: 1px solid var(--border2);
-    border-radius: 12px;
-    box-shadow: 0 8px 32px var(--shadow-color);
-  }
-  #cin-menu.open { display: flex; }
-  .cin-opt {
-    display: flex; align-items: center; gap: 0.6rem;
-    background: none; border: none; cursor: pointer;
-    padding: 0.55rem 0.65rem; border-radius: 8px;
-    font-family: 'Inter', sans-serif; text-align: left;
-    color: var(--text); transition: background 0.15s ease;
-  }
-  .cin-opt:hover { background: var(--surface2); }
-  .cin-opt-ico { font-size: 1.05rem; line-height: 1; }
-  .cin-opt-txt { display: flex; flex-direction: column; gap: 2px; }
-  .cin-opt-txt b { font-size: 0.8rem; font-weight: 600; }
-  .cin-opt-txt i { font-size: 0.66rem; font-style: normal; color: var(--muted); }
-  .cin-hint {
-    font-size: 0.62rem; color: var(--muted);
-    padding: 0.4rem 0.65rem 0.2rem;
-  }
-  #btn-vistas.cin-active { border-color: #ef4444; color: #ef4444; }
-  body.cinematic-active #map { pointer-events: none !important; }
-  body.cinematic-active .leaflet-control-container { visibility: hidden !important; }
-  body.cinematic-active .plc-stack { transform: rotate(var(--cin-rot, 0deg)); }
-  #cin-attribution {
-    position: absolute; right: 8px; bottom: 6px;
-    z-index: 450;
-    display: none;
-    background: rgba(255,255,255,0.85);
-    color: #333;
-    font-family: 'Inter', sans-serif;
-    font-size: 10px; line-height: 1.3;
-    padding: 2px 7px; border-radius: 4px;
-    pointer-events: none;
-  }
-  body.cinematic-active #cin-attribution { display: block; }
-
   /* ── EMPTY STATE OVERLAY ── */
   .map-empty-state {
     position: absolute;
@@ -2540,15 +2492,6 @@
         Exportar PDF
     </button>
 
-    <button class="btn-cambiar-mapa" id="btn-vistas" title="Vistas de cámara (Órbita / Espiral)">
-      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="8" cy="8" r="6"/>
-        <path d="M2 8h12"/>
-        <path d="M8 2c1.7 1.7 2.6 3.7 2.6 6S9.7 12.3 8 14C6.3 12.3 5.4 10.3 5.4 8S6.3 3.7 8 2z"/>
-      </svg>
-      Vistas
-    </button>
-
     <div class="header-stats">
       <div class="stat-chip">
         <span>Mapas</span>
@@ -2600,18 +2543,6 @@
     </div>
   </header>
 
-  <div id="cin-menu">
-    <button class="cin-opt" data-mode="orbita">
-      <span class="cin-opt-ico">🎬</span>
-      <span class="cin-opt-txt"><b>Vista Órbita</b><i>Gira 360° alrededor del centro</i></span>
-    </button>
-    <button class="cin-opt" data-mode="espiral">
-      <span class="cin-opt-ico">🌀</span>
-      <span class="cin-opt-txt"><b>Vista Espiral</b><i>Rotación con zoom en espiral</i></span>
-    </button>
-    <div class="cin-hint">Presiona Esc para detener en cualquier momento</div>
-  </div>
-
   <main>
     <div id="map-container">
       <div id="hud-selection">
@@ -2649,7 +2580,6 @@
         </div>
       </div>
       <div id="map"></div>
-      <div id="cin-attribution">&copy; OpenStreetMap</div>
       <div class="workflow-toast" id="workflow-toast">
         <span class="workflow-toast-icon">👆</span>
         <span id="workflow-toast-text">Haz clic en un polígono del mapa o en la lista para ver sus datos</span>
@@ -5963,7 +5893,6 @@ function loadSelectedMap(index) {
 
   $btnCambiarMapa.style.display = 'flex';
   document.getElementById('btn-export-pdf').style.display = 'flex';
-  document.getElementById('btn-vistas').style.display = 'flex';
   recordsReady.then(() => {
     renderAll();
   });
@@ -6665,222 +6594,6 @@ document.addEventListener('mouseup', () => {
   document.querySelectorAll('.upload-btn, .btn-cambiar-mapa, .btn-grabar, .map-empty-btn, .admin-login-btn, .admin-logout-btn, .theme-toggle, .menu-toggle, .login-submit, .login-cancel, .selector-card-btn').forEach(btn => {
     gsap.to(btn, { opacity: 1, duration: 0.2, ease: 'power2.out' });
   });
-});
-
-// ── VISTAS CINEMÁTICAS (ÓRBITA / ESPIRAL estilo Google Earth Studio) ──
-const $cinBtn = document.getElementById('btn-vistas');
-const $cinMenu = document.getElementById('cin-menu');
-const $cinMapEl = document.getElementById('map');
-const $cinAttr = document.getElementById('cin-attribution');
-
-const CIN_BTN_IDLE_HTML = $cinBtn.innerHTML;
-const CIN_BTN_STOP_HTML = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="6" height="6" rx="1"/></svg> Detener`;
-
-let cinActive = false, cinPhase = null, cinStopping = false, cinMode = null;
-let cinRaf = 0, cinStart = 0, cinAngle = 0, cinDur = 0, cinRevs = 0;
-let cinZoomFrom = 0, cinZoomTo = 0;
-let cinSavedInteractions = null, cinSavedSnap = null;
-let cinStopStart = 0, cinStopFrom = 0, cinStopTo = 0;
-let cinPanFrom = null, cinPanTo = null, cinPanStart = 0, cinPanDur = 0;
-
-function cinEaseInOut(t) { return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; }
-function cinEaseOut(t) { return 1 - Math.pow(1 - t, 3); }
-
-function cinCoverScale(w, h, rad) {
-  const c = Math.abs(Math.cos(rad)), s = Math.abs(Math.sin(rad));
-  return Math.max((w * c + h * s) / w, (w * s + h * c) / h);
-}
-
-function cinApply(angleDeg) {
-  const w = $cinMapEl.clientWidth || 1;
-  const h = $cinMapEl.clientHeight || 1;
-  const rad = angleDeg * Math.PI / 180;
-  $cinMapEl.style.transformOrigin = '50% 50%';
-  $cinMapEl.style.transform = `rotate(${angleDeg.toFixed(2)}deg) scale(${cinCoverScale(w, h, rad).toFixed(4)})`;
-  $cinMapEl.style.setProperty('--cin-rot', (-angleDeg).toFixed(2) + 'deg');
-}
-
-function cinGetTarget() {
-  if (selectedBlockKey) {
-    const found = findBlockByKey(selectedBlockKey);
-    if (found && found.block && found.block.latlngs && found.block.latlngs.length) {
-      return getPolygonInteriorPoint(found.block.latlngs);
-    }
-  }
-  const c = map.getCenter();
-  return [c.lat, c.lng];
-}
-
-function cinSpiralZoomEnd(z0) {
-  const maxZ = map.getMaxZoom() || 18;
-  const minZ = map.getMinZoom() || 0;
-  if (z0 < maxZ) return Math.min(z0 + 1, maxZ);
-  if (z0 > minZ) return Math.max(z0 - 1, minZ);
-  return z0;
-}
-
-function cinDisableInteractions() {
-  const handles = ['dragging', 'scrollWheelZoom', 'touchZoom', 'boxZoom', 'keyboard', 'doubleClickZoom', 'tap'];
-  cinSavedInteractions = {};
-  handles.forEach(h => {
-    if (map[h] && map[h].enabled) {
-      cinSavedInteractions[h] = map[h].enabled();
-      if (cinSavedInteractions[h] && map[h].disable) map[h].disable();
-    }
-  });
-}
-
-function cinRestoreInteractions() {
-  if (!cinSavedInteractions) return;
-  Object.keys(cinSavedInteractions).forEach(h => {
-    if (cinSavedInteractions[h] && map[h] && map[h].enable) map[h].enable();
-  });
-  cinSavedInteractions = null;
-}
-
-function openCinMenu() {
-  const r = $cinBtn.getBoundingClientRect();
-  $cinMenu.style.top = (r.bottom + 8) + 'px';
-  $cinMenu.classList.add('open');
-  const mw = $cinMenu.offsetWidth || 215;
-  let left = Math.min(r.left, window.innerWidth - mw - 12);
-  if (left < 12) left = 12;
-  $cinMenu.style.left = left + 'px';
-  gsap.fromTo($cinMenu, { opacity: 0, y: -6, scale: 0.97 }, { opacity: 1, y: 0, scale: 1, duration: 0.18, ease: 'power2.out' });
-}
-
-function closeCinMenu() {
-  if (!$cinMenu.classList.contains('open')) return;
-  $cinMenu.classList.remove('open');
-  gsap.set($cinMenu, { clearProps: 'opacity,transform' });
-}
-
-function startCinematic(mode) {
-  if (cinActive) return;
-  closeCinMenu();
-  if (!map || loadedMaps.length === 0) {
-    showWorkflowToast('Carga un mapa primero', '🗺', 2600);
-    return;
-  }
-  cinActive = true; cinPhase = null; cinStopping = false;
-  cinMode = mode;
-  cinAngle = 0;
-  document.body.classList.add('cinematic-active');
-  $cinBtn.classList.add('cin-active');
-  $cinBtn.innerHTML = CIN_BTN_STOP_HTML;
-  cinDisableInteractions();
-  cinSavedSnap = map.options.zoomSnap;
-  map.options.zoomSnap = 0;
-
-  const target = cinGetTarget();
-  cinZoomFrom = map.getZoom();
-  cinZoomTo = mode === 'espiral' ? cinSpiralZoomEnd(cinZoomFrom) : cinZoomFrom;
-  cinRevs = 1;
-  cinDur = mode === 'espiral' ? 36000 : 30000;
-  $cinAttr.innerHTML = map.hasLayer(vistaSatelital) ? 'Tiles &copy; Esri' : '&copy; OpenStreetMap';
-  showWorkflowToast(mode === 'espiral' ? 'Vista Espiral activa — Esc para detener' : 'Vista Órbita activa — Esc para detener', mode === 'espiral' ? '🌀' : '🎬', 2600);
-
-  const c = map.getCenter();
-  const p1 = map.latLngToContainerPoint([c.lat, c.lng]);
-  const p2 = map.latLngToContainerPoint(target);
-  const d = Math.hypot(p1.x - p2.x, p1.y - p2.y);
-  if (d > 30) {
-    cinPhase = 'pan';
-    cinPanFrom = [c.lat, c.lng];
-    cinPanTo = target;
-    cinPanStart = performance.now();
-    cinPanDur = Math.min(3000, Math.max(1200, 1200 + d * 1.5));
-  } else {
-    cinPhase = 'spin';
-    cinStart = performance.now();
-  }
-  cinRaf = requestAnimationFrame(cinTick);
-}
-
-function cinTick(now) {
-  if (!cinActive) return;
-  if (cinStopping) {
-    const t = Math.min(1, (now - cinStopStart) / 900);
-    cinApply(cinStopFrom + (cinStopTo - cinStopFrom) * cinEaseOut(t));
-    if (t >= 1) { cinCleanup('stop'); return; }
-    cinRaf = requestAnimationFrame(cinTick);
-    return;
-  }
-  if (cinPhase === 'pan') {
-    const t = Math.min(1, (now - cinPanStart) / cinPanDur);
-    const e = cinEaseInOut(t);
-    const lat = cinPanFrom[0] + (cinPanTo[0] - cinPanFrom[0]) * e;
-    const lng = cinPanFrom[1] + (cinPanTo[1] - cinPanFrom[1]) * e;
-    map.setView([lat, lng], map.getZoom(), { animate: false });
-    if (t >= 1) { cinPhase = 'spin'; cinStart = now; }
-    cinRaf = requestAnimationFrame(cinTick);
-    return;
-  }
-  const t = Math.min(1, (now - cinStart) / cinDur);
-  cinAngle = cinRevs * 360 * cinEaseInOut(t);
-  cinApply(cinAngle);
-  if (cinMode === 'espiral' && cinZoomTo !== cinZoomFrom) {
-    const z = cinZoomFrom + (cinZoomTo - cinZoomFrom) * cinEaseInOut(t);
-    if (Math.abs(map.getZoom() - z) > 0.0005) map.setZoom(z, { animate: false });
-  }
-  if (t >= 1) { cinCleanup('end'); return; }
-  cinRaf = requestAnimationFrame(cinTick);
-}
-
-function stopCinematic() {
-  if (!cinActive || cinStopping) return;
-  if (cinPhase !== 'spin') { cinCleanup('stop'); return; }
-  const next = Math.round(cinAngle / 360) * 360;
-  if (next === cinAngle) { cinCleanup('stop'); return; }
-  cinStopping = true;
-  cinStopStart = performance.now();
-  cinStopFrom = cinAngle;
-  cinStopTo = next;
-  cancelAnimationFrame(cinRaf);
-  cinRaf = requestAnimationFrame(cinTick);
-}
-
-function cinCleanup(kind) {
-  if (!cinActive) return;
-  const label = cinMode === 'espiral' ? 'Vista Espiral' : 'Vista Órbita';
-  cancelAnimationFrame(cinRaf); cinRaf = 0;
-  cinActive = false; cinPhase = null; cinStopping = false; cinMode = null;
-  cinAngle = 0;
-  $cinMapEl.style.transform = '';
-  $cinMapEl.style.transformOrigin = '';
-  $cinMapEl.style.removeProperty('--cin-rot');
-  document.body.classList.remove('cinematic-active');
-  $cinBtn.classList.remove('cin-active');
-  $cinBtn.innerHTML = CIN_BTN_IDLE_HTML;
-  if (cinSavedSnap !== null) {
-    map.options.zoomSnap = cinSavedSnap;
-    const z = map.getZoom();
-    if (!Number.isInteger(z)) map.setZoom(Math.round(z), { animate: true });
-    cinSavedSnap = null;
-  }
-  cinRestoreInteractions();
-  showWorkflowToast(kind === 'end' ? `${label} finalizada ✓` : `${label} detenida ✓`, '🎬', 2200);
-}
-
-$cinBtn.addEventListener('click', () => {
-  if (cinActive) { stopCinematic(); return; }
-  if ($cinMenu.classList.contains('open')) closeCinMenu();
-  else openCinMenu();
-});
-$cinMenu.addEventListener('click', (e) => {
-  const opt = e.target.closest('.cin-opt');
-  if (!opt) return;
-  startCinematic(opt.dataset.mode);
-});
-document.addEventListener('click', (e) => {
-  if (!$cinMenu.classList.contains('open')) return;
-  if (e.target.closest('#cin-menu') || e.target.closest('#btn-vistas')) return;
-  closeCinMenu();
-});
-document.addEventListener('keydown', (e) => {
-  if (e.key !== 'Escape') return;
-  if (cinActive) { stopCinematic(); return; }
-  closeCinMenu();
 });
 
 // ── GSAP AMBIENT ANIMATIONS ──
