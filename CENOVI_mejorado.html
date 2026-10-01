@@ -2651,6 +2651,10 @@
               <span>Nombre del Publicador</span>
               <input type="text" id="d-publisher" placeholder="Ej: Juan Pérez">
             </label>
+            <label id="d-publisher-end-label" style="display:none;">
+              <span>Publicador que finalizó (opcional)</span>
+              <input type="text" id="d-publisher-end" placeholder="Ej: María López" title="Si se deja vacío, se mantiene el publicador del inicio">
+            </label>
             <label>
               <span>Fecha de Inicio</span>
               <input type="date" id="d-date-start">
@@ -2781,6 +2785,8 @@ const $dName = document.getElementById('d-name');
 const $dRows = document.getElementById('d-rows');
 const $dForm = document.getElementById('d-form');
 const $dPublisher = document.getElementById('d-publisher');
+const $dPublisherEnd = document.getElementById('d-publisher-end');
+const $dPubEndLabel = document.getElementById('d-publisher-end-label');
 const $dDateStart = document.getElementById('d-date-start');
 const $dDateEnd = document.getElementById('d-date-end');
 const $dSaveStatus = document.getElementById('d-save-status');
@@ -3341,6 +3347,14 @@ function getOpenRecordForBlock(blockName) {
   if ((rec.fecha_fin || '').trim()) return null;
   if (!toISODate(rec.fecha_inicio)) return null;
   return rec;
+}
+
+function composeFinishPublisher(startPub, endPub) {
+  const s = (startPub || '').trim();
+  const e = (endPub || '').trim();
+  if (!s) return e;
+  if (!e || e.toLowerCase() === s.toLowerCase()) return s;
+  return s + ' / ' + e;
 }
 
 function getEditableRecords(blockName) {
@@ -4909,6 +4923,11 @@ function enterCompletionMode(rec) {
   $dPublisher.disabled = true;
   $dDateStart.disabled = true;
   $dDateEnd.disabled = false;
+  $dPublisherEnd.value = '';
+  $dPublisherEnd.disabled = false;
+  $dPubEndLabel.style.display = '';
+  const startSpan = $dPublisher.closest('label').querySelector('span');
+  if (startSpan) startSpan.textContent = 'Publicador que inició';
   if ($dDateStart.value) $dDateEnd.min = $dDateStart.value;
   $dSaveStatus.className = 'save-status';
   $dSaveStatus.textContent = '';
@@ -4941,6 +4960,10 @@ function exitCompletionMode() {
   $dDateStart.disabled = false;
   $dDateEnd.disabled = false;
   $dDateEnd.removeAttribute('min');
+  $dPublisherEnd.value = '';
+  $dPubEndLabel.style.display = 'none';
+  const startSpan = $dPublisher.closest('label').querySelector('span');
+  if (startSpan) startSpan.textContent = 'Nombre del Publicador';
   const lbl = $dForm.querySelector('.completion-mode-label');
   if (lbl) lbl.remove();
 }
@@ -4955,7 +4978,7 @@ function clearCompletionState() {
 function reevaluateCompletionMode() {
   if (!selectedBlockKey || completionRecord || editingRecord) return;
   if ($dForm.style.display === 'none') return;
-  if ($dPublisher.value || $dDateStart.value || $dDateEnd.value) return;
+  if ($dPublisher.value || $dPublisherEnd.value || $dDateStart.value || $dDateEnd.value) return;
   const found = findBlockByKey(selectedBlockKey);
   if (!found) return;
   const openRec = getOpenRecordForBlock(found.block.name);
@@ -4993,7 +5016,7 @@ function completeRecord() {
 
   const addPayload = {
     action: 'addRecord',
-    publicador: rec.publicador || '',
+    publicador: composeFinishPublisher(rec.publicador, $dPublisherEnd.value),
     territorio: rec.territorio,
     mapName: rec.mapName || mapData.name,
     fechaInicio: toISODate(rec.fecha_inicio) || rec.fecha_inicio || '',
