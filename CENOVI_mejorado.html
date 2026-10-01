@@ -991,6 +991,26 @@
   }
   .edit-mode-cancel:hover { opacity: 0.8; }
 
+  .completion-mode-label {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.4rem;
+    padding: 0.4rem 0.6rem;
+    background: rgba(16,185,129,0.08);
+    border: 1px solid rgba(16,185,129,0.25);
+    border-radius: 5px;
+    font-size: 0.68rem;
+    color: #10b981;
+    font-weight: 500;
+  }
+  .registration-section input:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    -webkit-text-fill-color: var(--muted);
+  }
+
   .detail-edit-section {
     margin-top: 0.5rem;
     padding-top: 0.5rem;
@@ -2720,6 +2740,7 @@ let activeMapFilter = null;
 let selectedBlockKey = null;
 let mobileZoomOnly = false;
 let editingRecord = null;
+let completionRecord = null;
 
 let map, polygonLayerGroup;
 let allBlockItems = [];
@@ -3213,7 +3234,10 @@ function fetchRecords() {
         renderMapList();
         renderBlockList();
       }
-      if (selectedBlockKey) renderDetailRecords();
+      if (selectedBlockKey) {
+        renderDetailRecords();
+        reevaluateCompletionMode();
+      }
     })
     .catch((err) => {
       console.warn('[MapView] Error al cargar registros de Google Sheets:', err);
@@ -3267,8 +3291,34 @@ function formatRecordDate(str) {
   return new Date(ts).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
+function toISODate(str) {
+  if (!str) return '';
+  const s = String(str).trim();
+  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  const m = s.match(/^[A-Za-z]{3}\s+([A-Za-z]{3})\s+(\d{1,2})\s+(\d{4})/);
+  if (m) {
+    const months = { Jan: 1, Feb: 2, Mar: 3, Apr: 4, May: 5, Jun: 6, Jul: 7, Aug: 8, Sep: 9, Oct: 10, Nov: 11, Dec: 12 };
+    const mo = months[m[1]];
+    if (mo) return `${m[3]}-${String(mo).padStart(2, '0')}-${String(Number(m[2])).padStart(2, '0')}`;
+  }
+  const ts = parseDateValue(s);
+  if (!ts) return '';
+  const d = new Date(ts);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 function getRecordForBlock(blockName) {
   return recordsMap[normalizeTerritoryName(blockName)] || null;
+}
+
+function getOpenRecordForBlock(blockName) {
+  const rec = getRecordForBlock(blockName);
+  if (!rec) return null;
+  if (!(rec.fecha_inicio || '').trim()) return null;
+  if ((rec.fecha_fin || '').trim()) return null;
+  if (!toISODate(rec.fecha_inicio)) return null;
+  return rec;
 }
 
 function getEditableRecords(blockName) {
@@ -4335,7 +4385,11 @@ function selectBlock(key) {
   if (!firstBlockSelected) {
     firstBlockSelected = true;
     setTimeout(() => {
-      showWorkflowToast('Completa los campos y presiona "Grabar en Google Sheets" para guardar', '📝', 5000);
+      if (completionRecord) {
+        showWorkflowToast('Este territorio ya tiene inicio: solo falta registrar la fecha de finalización', '📅', 5000);
+      } else {
+        showWorkflowToast('Completa los campos y presiona "Grabar en Google Sheets" para guardar', '📝', 5000);
+      }
     }, 1500);
   }
 
@@ -4374,6 +4428,7 @@ function selectBlock(key) {
   });
   const existingLabel = $dForm.querySelector('.edit-mode-label');
   if (existingLabel) existingLabel.remove();
+  exitCompletionMode();
   editingRecord = null;
   $dPublisher.value = '';
   $dDateStart.value = '';
@@ -4387,6 +4442,8 @@ function selectBlock(key) {
   $dBtnSave.onclick = saveToSheet;
   $dSaveStatus.className = 'save-status';
   $dSaveStatus.textContent = '';
+  const openRec = getOpenRecordForBlock(block.name);
+  if (openRec) enterCompletionMode(openRec);
 }
 
 function deselectBlock() {
@@ -4396,6 +4453,7 @@ function deselectBlock() {
 }
 
 function resetDetail() {
+  if (completionRecord) exitCompletionMode();
   $dName.textContent = '—';
   $dRows.innerHTML = '<span class="detail-empty">Haz clic en un polígono para ver sus datos</span>';
   $dForm.style.display = 'none';
@@ -4626,6 +4684,7 @@ function updateRecord() {
 }
 
 function startEditRecord(publisher, fechaInicio, fechaFin) {
+  exitCompletionMode();
   editingRecord = { publicador: publisher, fecha_inicio: fechaInicio, fecha_fin: fechaFin };
   $dPublisher.value = publisher || '';
   $dDateStart.value = fechaInicio || '';
@@ -4674,6 +4733,226 @@ function exitEditMode() {
   $dSaveStatus.textContent = '';
 }
 
+// ── MODO COMPLETAR REGISTRO (solo falta fecha de finalización) ──
+const SAVE_BTN_DEFAULT_HTML = `
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M13 2H3a1 1 0 00-1 1v10a1 1 0 001 1h10a1 1 0 001-1V3a1 1 0 00-1-1z"/>
+      <path d="M5 8l2 2 4-4"/>
+    </svg>
+    Grabar en Google Sheets`;
+const SAVE_BTN_FINAL_HTML = `
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M13 2H3a1 1 0 00-1 1v10a1 1 0 001 1h10a1 1 0 001-1V3a1 1 0 00-1-1z"/>
+      <path d="M5 8l2 2 4-4"/>
+    </svg>
+    Guardar fecha finalización`;
+
+function enterCompletionMode(rec) {
+  if (!rec) return;
+  completionRecord = rec;
+
+  $dPublisher.value = rec.publicador || '';
+  $dDateStart.value = toISODate(rec.fecha_inicio) || '';
+  $dDateEnd.value = '';
+  $dPublisher.disabled = true;
+  $dDateStart.disabled = true;
+  $dDateEnd.disabled = false;
+  if ($dDateStart.value) $dDateEnd.min = $dDateStart.value;
+  $dSaveStatus.className = 'save-status';
+  $dSaveStatus.textContent = '';
+
+  $dBtnSave.innerHTML = SAVE_BTN_FINAL_HTML;
+  $dBtnSave.onclick = completeRecord;
+
+  const existing = $dForm.querySelector('.completion-mode-label');
+  if (existing) existing.remove();
+  const lbl = document.createElement('div');
+  lbl.className = 'completion-mode-label';
+  const span = document.createElement('span');
+  const strong = document.createElement('strong');
+  strong.textContent = rec.publicador || 'sin publicador';
+  span.append('Registro en curso: ', strong, ' — falta la fecha final');
+  const cancelBtn = document.createElement('button');
+  cancelBtn.type = 'button';
+  cancelBtn.className = 'edit-mode-cancel';
+  cancelBtn.textContent = 'Nuevo registro';
+  lbl.append(span, cancelBtn);
+  $dForm.querySelector('.registration-section').prepend(lbl);
+  cancelBtn.addEventListener('click', clearCompletionState);
+
+  gsap.fromTo($dForm, { scale: 0.98 }, { scale: 1, duration: 0.3, ease: 'back.out(1.5)' });
+}
+
+function exitCompletionMode() {
+  completionRecord = null;
+  $dPublisher.disabled = false;
+  $dDateStart.disabled = false;
+  $dDateEnd.disabled = false;
+  $dDateEnd.removeAttribute('min');
+  const lbl = $dForm.querySelector('.completion-mode-label');
+  if (lbl) lbl.remove();
+}
+
+function clearCompletionState() {
+  exitCompletionMode();
+  exitEditMode();
+  const lbl = $dForm.querySelector('.completion-mode-label');
+  if (lbl) lbl.remove();
+}
+
+function reevaluateCompletionMode() {
+  if (!selectedBlockKey || completionRecord || editingRecord) return;
+  if ($dForm.style.display === 'none') return;
+  if ($dPublisher.value || $dDateStart.value || $dDateEnd.value) return;
+  const found = findBlockByKey(selectedBlockKey);
+  if (!found) return;
+  const openRec = getOpenRecordForBlock(found.block.name);
+  if (openRec) enterCompletionMode(openRec);
+}
+
+function completeRecord() {
+  if (!selectedBlockKey || !completionRecord) return;
+
+  const found = findBlockByKey(selectedBlockKey);
+  if (!found) return;
+  const { mapData } = found;
+
+  const rec = completionRecord;
+  const statusEl = $dSaveStatus;
+  const btn = $dBtnSave;
+  const dateEnd = $dDateEnd.value;
+
+  if (!dateEnd) {
+    statusEl.className = 'save-status error';
+    statusEl.textContent = 'Selecciona la fecha de finalización.';
+    return;
+  }
+  const fiISO = toISODate(rec.fecha_inicio);
+  if (fiISO && dateEnd && dateEnd < fiISO) {
+    statusEl.className = 'save-status error';
+    statusEl.textContent = 'La fecha final no puede ser anterior a la de inicio.';
+    return;
+  }
+  if (!navigator.onLine) {
+    statusEl.className = 'save-status error';
+    statusEl.textContent = 'No hay conexión. Se requiere internet para cerrar el registro.';
+    return;
+  }
+
+  const addPayload = {
+    action: 'addRecord',
+    publicador: rec.publicador || '',
+    territorio: rec.territorio,
+    mapName: rec.mapName || mapData.name,
+    fechaInicio: toISODate(rec.fecha_inicio) || rec.fecha_inicio || '',
+    fechaFin: dateEnd
+  };
+  const delPayload = {
+    action: 'deleteRecord',
+    publicador: rec.publicador || '',
+    fechaInicio: rec.fecha_inicio || '',
+    fechaFin: rec.fecha_fin || '',
+    territorio: rec.territorio
+  };
+
+  btn.disabled = true;
+  btn.textContent = 'Guardando...';
+  statusEl.className = 'save-status';
+  statusEl.textContent = '';
+
+  function attemptDelete(retries) {
+    return fetch(`${GOOGLE_SHEETS_URL}?action=deleteRecord&d=${encodeURIComponent(JSON.stringify(delPayload))}`)
+      .then(r => r.json())
+      .then(d => {
+        if (d && d.status === 'ok' && d.count > 0) return true;
+        if (retries > 0) return new Promise(res => setTimeout(res, 800)).then(() => attemptDelete(retries - 1));
+        return false;
+      })
+      .catch(() => retries > 0
+        ? new Promise(res => setTimeout(res, 800)).then(() => attemptDelete(retries - 1))
+        : false);
+  }
+
+  function applyLocalCompletion() {
+    sheetRecords = sheetRecords.filter(r2 => !(
+      (r2.territorio || '') === delPayload.territorio &&
+      (r2.publicador || '') === delPayload.publicador &&
+      (r2.fecha_inicio || '') === delPayload.fechaInicio &&
+      (r2.fecha_fin || '') === delPayload.fechaFin
+    ));
+    sheetRecords.push({
+      publicador: addPayload.publicador,
+      territorio: addPayload.territorio,
+      mapName: addPayload.mapName,
+      fecha_inicio: addPayload.fechaInicio,
+      fecha_fin: dateEnd
+    });
+    buildRecordsMap();
+    saveRecordsToStorage();
+    renderAllPolygons();
+    renderBlockList();
+    renderDetailRecords();
+  }
+
+  attemptDelete(2)
+    .then(deleted => {
+      if (!deleted) {
+        if (completionRecord === rec) {
+          statusEl.className = 'save-status error';
+          statusEl.textContent = 'No se pudo completar el registro. Verifica tu conexión.';
+        }
+        return;
+      }
+      return fetch(`${GOOGLE_SHEETS_URL}?action=addRecord&d=${encodeURIComponent(JSON.stringify(addPayload))}`)
+        .then(r => r.json())
+        .then(d => {
+          if (!d || d.status !== 'ok') throw new Error('add failed');
+          return 'saved';
+        })
+        .catch(() => {
+          queueRecord(addPayload);
+          applyLocalCompletion();
+          return 'queued';
+        });
+    })
+    .then(result => {
+      if (!result) return;
+      const stillActive = completionRecord === rec;
+      if (result === 'queued') {
+        if (stillActive) {
+          clearCompletionState();
+          statusEl.className = 'save-status success';
+          statusEl.textContent = 'Guardado offline. Se sincronizará al conectar.';
+        }
+        showWorkflowToast('Guardado offline — se completará al conectar', '📴', 3500);
+        updatePendingBadge();
+      } else {
+        applyLocalCompletion();
+        if (stillActive) {
+          clearCompletionState();
+          statusEl.className = 'save-status success';
+          statusEl.textContent = 'Fecha de finalización guardada. Registro completado ✓';
+        }
+        showWorkflowToast('Territorio completado ✓', '✅', 3000);
+      }
+      fetchRecords();
+    })
+    .catch(() => {
+      if (completionRecord === rec) {
+        statusEl.className = 'save-status error';
+        statusEl.textContent = 'Error al guardar. Intenta de nuevo.';
+      }
+    })
+    .finally(() => {
+      btn.disabled = false;
+      if (completionRecord) {
+        btn.innerHTML = SAVE_BTN_FINAL_HTML;
+      } else if (!editingRecord) {
+        btn.innerHTML = SAVE_BTN_DEFAULT_HTML;
+      }
+    });
+}
+
 function deleteSingleRecord(publicador, fechaInicio, fechaFin, territorio) {
   if (!confirm(`¿Borrar este registro de "${territorio}"?\n\nPublicador: ${publicador}\nEste registro se eliminará de Google Sheets.`)) return;
 
@@ -4693,6 +4972,13 @@ function deleteSingleRecord(publicador, fechaInicio, fechaFin, territorio) {
     .then(r => r.json())
     .then(data => {
       if (data.status === 'ok') {
+        if (completionRecord &&
+            (completionRecord.territorio || '') === territorio &&
+            (completionRecord.publicador || '') === publicador &&
+            (completionRecord.fecha_inicio || '') === fechaInicio &&
+            (completionRecord.fecha_fin || '') === fechaFin) {
+          clearCompletionState();
+        }
         sheetRecords = sheetRecords.filter(r2 => {
           if ((r2.territorio || '') !== territorio) return true;
           if ((r2.publicador || '') !== publicador) return true;
@@ -5986,6 +6272,7 @@ if (!navigator.onLine) {
 }
 
 updatePendingBadge();
+if (navigator.onLine && getPendingRecords().length > 0) syncPendingRecords();
 
 // ── GSAP BUTTON PRESS FEEDBACK ──
 document.addEventListener('mousedown', (e) => {
