@@ -6322,7 +6322,18 @@ async function exportPDF() {
   doc.text(`Total de mapas: ${loadedMaps.length}`, margin, y);
   y += 8;
 
-  const totalBlocks = loadedMaps.reduce((s, m) => s + m.blocks.length, 0);
+  const mapsUnique = loadedMaps.map(m => {
+    const seen = new Set();
+    const uniqueBlocks = m.blocks.filter(b => {
+      const k = normalizeTerritoryName(b.name);
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+    return { mapData: m, uniqueBlocks };
+  });
+
+  const totalBlocks = mapsUnique.reduce((s, m) => s + m.uniqueBlocks.length, 0);
   doc.text(`Total de bloques: ${totalBlocks}`, margin, y);
   y += 10;
 
@@ -6389,8 +6400,8 @@ async function exportPDF() {
   doc.line(margin, y, pageW - margin, y);
   y += 8;
 
-  for (let mapIdx = 0; mapIdx < loadedMaps.length; mapIdx++) {
-    const mapData = loadedMaps[mapIdx];
+  for (let mapIdx = 0; mapIdx < mapsUnique.length; mapIdx++) {
+    const { mapData, uniqueBlocks } = mapsUnique[mapIdx];
     ensureSpace(20);
 
     doc.setFillColor(59, 130, 246);
@@ -6398,7 +6409,7 @@ async function exportPDF() {
     doc.setTextColor(255, 255, 255);
     doc.setFont(undefined, 'bold');
     doc.setFontSize(11);
-    doc.text(`${mapIdx + 1}. ${mapData.name} (${mapData.blocks.length} bloques)`, margin + 3, y + 1);
+    doc.text(`${mapIdx + 1}. ${mapData.name} (${uniqueBlocks.length} bloques)`, margin + 3, y + 1);
     doc.setTextColor(0, 0, 0);
     y += 12;
 
@@ -6433,7 +6444,7 @@ async function exportPDF() {
     y += 7;
     doc.setFont(undefined, 'normal');
 
-    mapData.blocks.forEach((block, i) => {
+    uniqueBlocks.forEach((block, i) => {
       ensureSpace(7);
       const visitInfo = getVisitStatusInfo(block.name);
       const record = getRecordForBlock(block.name);
