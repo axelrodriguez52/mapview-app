@@ -3316,7 +3316,7 @@ function parseDateValue(str) {
 }
 
 function normalizeTerritoryName(name) {
-  return name.replace(/\s*\(\d+\)\s*$/, '').toLowerCase().trim();
+  return name.replace(/(\s*\(\d+\))+\s*$/, '').toLowerCase().trim();
 }
 
 function formatRecordDate(str) {
@@ -6323,13 +6323,15 @@ async function exportPDF() {
   y += 8;
 
   const mapsUnique = loadedMaps.map(m => {
-    const seen = new Set();
-    const uniqueBlocks = m.blocks.filter(b => {
+    const groups = new Map();
+    m.blocks.forEach(b => {
       const k = normalizeTerritoryName(b.name);
-      if (seen.has(k)) return false;
-      seen.add(k);
-      return true;
+      if (!groups.has(k)) groups.set(k, []);
+      groups.get(k).push(b);
     });
+    const uniqueBlocks = [...groups.values()].map(list =>
+      list.find(b => b.name.trim().toLowerCase() === normalizeTerritoryName(b.name)) || list[0]
+    );
     return { mapData: m, uniqueBlocks };
   });
 
