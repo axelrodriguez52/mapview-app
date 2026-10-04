@@ -6425,13 +6425,15 @@ async function exportPDF() {
     doc.rect(margin, y, imgW, imgH);
     y += imgH + 6;
 
-    const colWidths = { num: 10, name: 55, status: 30, publisher: 40, dates: 45 };
-    if (pageW < margin * 2 + colWidths.num + colWidths.name + colWidths.status + colWidths.publisher + colWidths.dates) {
+    const colWidths = { num: 10, name: 55, status: 30, publisher: 40, date1: 23, date2: 22 };
+    if (pageW < margin * 2 + colWidths.num + colWidths.name + colWidths.status + colWidths.publisher + colWidths.date1 + colWidths.date2) {
       colWidths.name = 40;
       colWidths.publisher = 30;
-      colWidths.dates = 35;
+      colWidths.date1 = 19;
+      colWidths.date2 = 16;
     }
     const startX = margin;
+    const datesX = startX + colWidths.num + colWidths.name + colWidths.status + colWidths.publisher;
 
     ensureSpace(8);
     doc.setFillColor(240, 240, 240);
@@ -6442,7 +6444,8 @@ async function exportPDF() {
     doc.text('Territorio', startX + colWidths.num + 2, y + 1);
     doc.text('Estado', startX + colWidths.num + colWidths.name + 2, y + 1);
     doc.text('Publicador', startX + colWidths.num + colWidths.name + colWidths.status + 2, y + 1);
-    doc.text('Fechas', startX + colWidths.num + colWidths.name + colWidths.status + colWidths.publisher + 2, y + 1);
+    doc.text('Inicio', datesX + 2, y + 1);
+    doc.text('Fin', datesX + colWidths.date1 + 2, y + 1);
     y += 7;
     doc.setFont(undefined, 'normal');
 
@@ -6468,16 +6471,11 @@ async function exportPDF() {
       const pub = record ? (record.publicador || '') : '';
       doc.text(pub.substring(0, 22), startX + colWidths.num + colWidths.name + colWidths.status + 2, y + 1);
 
-      let dateStr = '';
-      if (record) {
-        const d1 = record.fecha_inicio ? new Date(record.fecha_inicio) : null;
-        const d2 = record.fecha_fin ? new Date(record.fecha_fin) : null;
-        const fmt = d => d && !isNaN(d.getTime()) ? d.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit' }) : '';
-        if (d1 && d2) dateStr = `${fmt(d1)} - ${fmt(d2)}`;
-        else if (d1) dateStr = fmt(d1);
-        else if (d2) dateStr = fmt(d2);
-      }
-      doc.text(dateStr, startX + colWidths.num + colWidths.name + colWidths.status + colWidths.publisher + 2, y + 1);
+      const fmt = d => d && !isNaN(d.getTime()) ? d.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit' }) : '';
+      const d1 = record && record.fecha_inicio ? new Date(record.fecha_inicio) : null;
+      const d2 = record && record.fecha_fin ? new Date(record.fecha_fin) : null;
+      doc.text(fmt(d1), datesX + 2, y + 1);
+      doc.text(fmt(d2), datesX + colWidths.date1 + 2, y + 1);
 
       y += 6;
     });
