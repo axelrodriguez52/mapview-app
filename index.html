@@ -6286,12 +6286,46 @@ async function drawMapCanvas(mapData) {
   return canvas;
 }
 
+function isTouchPrimary() {
+  try { return !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches); } catch (e) { return false; }
+}
+
+let pdfPopupWin = null;
+
+function openPdfPopupEarly() {
+  if (!isTouchPrimary()) return;
+  if (pdfPopupWin && !pdfPopupWin.closed) return;
+  try {
+    pdfPopupWin = window.open('', '_blank');
+    if (pdfPopupWin) {
+      pdfPopupWin.document.write('<title>MapView - PDF</title><body style="margin:0;display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;color:#666">Generando PDF...</body>');
+      pdfPopupWin.document.close();
+    }
+  } catch (e) { pdfPopupWin = null; }
+}
+
+function closePdfPopup() {
+  if (!pdfPopupWin) return;
+  try { pdfPopupWin.close(); } catch (e) {}
+  pdfPopupWin = null;
+}
+
 async function exportPDF() {
   if (loadedMaps.length === 0) {
     showWorkflowToast('No hay mapas cargados para exportar', '⚠️', 3000);
     return;
   }
+  openPdfPopupEarly();
+  try {
+    await exportPDFCore();
+  } catch (err) {
+    console.warn('[MapView] Error exportando PDF:', err);
+    closePdfPopup();
+    showWorkflowToast('No se pudo generar el PDF en este dispositivo', '⚠️', 3500);
+  }
+}
 
+async function exportPDFCore() {
   showWorkflowToast('Generando PDF con mapa base...', '⏳', 3000);
 
   const { jsPDF } = window.jspdf;
@@ -6508,16 +6542,32 @@ let pdfPreviewFileName = '';
 function openPdfPreview(doc, fileName) {
   try {
     const blob = doc.output('blob');
+    const url = URL.createObjectURL(blob);
+
+    // Móvil/tablet: los navegadores móviles no muestran PDFs blob dentro de un iframe,
+    // pero sí los muestran al navegar de forma superior → usar la pestaña abierta al iniciar.
+    if (pdfPopupWin && !pdfPopupWin.closed) {
+      try {
+        pdfPopupWin.location = url;
+        pdfPopupWin = null;
+        showWorkflowToast('Vista previa del PDF abierta en otra pestaña', '👁️', 3200);
+        return;
+      } catch (e) { /* si falla, seguimos con el modal */ }
+    }
+    closePdfPopup();
+
     pdfPreviewDoc = doc;
     pdfPreviewFileName = fileName;
     $pdfName.textContent = fileName;
-    $pdfFrame.src = URL.createObjectURL(blob);
+    if ($pdfFrame.src.startsWith('blob:')) URL.revokeObjectURL($pdfFrame.src);
+    $pdfFrame.src = url;
     $pdfModal.classList.add('active');
     gsap.fromTo($pdfModal, { opacity: 0 }, { opacity: 1, duration: 0.3, ease: 'power2.out' });
     gsap.fromTo('.pdf-box', { opacity: 0, scale: 0.94, y: 12 }, { opacity: 1, scale: 1, y: 0, duration: 0.4, ease: 'back.out(1.5)' });
-    showWorkflowToast('Revisa el PDF antes de descargarlo', '👁️', 3000);
+    showWorkflowToast(isTouchPrimary() ? 'Si no ves el PDF, toca Descargar' : 'Revisa el PDF antes de descargarlo', isTouchPrimary() ? '⬇️' : '👁️', 3200);
   } catch (err) {
     console.warn('[MapView] Error generando vista previa:', err);
+    closePdfPopup();
     doc.save(fileName);
     showWorkflowToast('PDF exportado correctamente ✓', '📄', 3000);
   }
