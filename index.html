@@ -2335,6 +2335,7 @@
   }
 
   /* ── REPORTE GENERAL ── */
+  #report-modal { z-index: 4990; }
   .report-box {
     background: var(--surface);
     border: 1px solid var(--border2);
@@ -2896,7 +2897,8 @@
     <div class="pdf-actions">
       <span class="pdf-name" id="report-count"></span>
       <div class="pdf-actions-buttons">
-        <button class="login-submit" id="report-close">Cerrar</button>
+        <button class="login-submit" id="report-export">Exportar PDF</button>
+        <button class="login-cancel" id="report-close">Cerrar</button>
       </div>
     </div>
   </div>
@@ -6638,55 +6640,6 @@ async function exportPDFCore() {
   doc.line(margin, y, pageW - margin, y);
   y += 8;
 
-  // ── REPORTE GENERAL ──
-  const report = buildGeneralReport();
-  ensureSpace(30);
-  doc.setDrawColor(200);
-  doc.line(margin, y, pageW - margin, y);
-  y += 4;
-
-  doc.setFontSize(12);
-  doc.setFont(undefined, 'bold');
-  doc.text('REPORTE GENERAL', margin, y);
-  y += 6;
-
-  doc.setFontSize(9);
-  doc.setFont(undefined, 'normal');
-  doc.text(`Total de territorios: ${report.total}`, margin, y);
-  y += 5;
-  doc.text(`Trabajados: ${report.worked.length} (${report.pctWorked}%)   -   Falta por trabajar: ${report.pending.length}`, margin, y);
-  y += 5;
-  doc.text(`Avance promedio: ${report.avg}%`, margin, y);
-  y += 7;
-
-  report.maps.forEach(m => {
-    if (!m.territories.length) return;
-    ensureSpace(12);
-    doc.setFont(undefined, 'bold');
-    doc.setFontSize(9);
-    doc.text(`${m.name}: ${m.worked.length}/${m.territories.length} trabajados - avance ${m.avg}%`, margin, y);
-    y += 5;
-    doc.setFont(undefined, 'normal');
-    doc.setFontSize(8);
-    const parts = [];
-    if (m.worked.length) parts.push('Trabajados: ' + m.worked.map(t => `${t.name} (${t.pct}%)`).join(', '));
-    if (m.pending.length) parts.push('Falta: ' + m.pending.map(t => t.name).join(', '));
-    if (!parts.length) parts.push('Sin territorios');
-    parts.forEach(part => {
-      doc.splitTextToSize(part, pageW - margin * 2).forEach(line => {
-        ensureSpace(4.5);
-        doc.text(line, margin, y);
-        y += 4;
-      });
-      y += 1.5;
-    });
-    y += 3;
-  });
-
-  doc.setDrawColor(200);
-  doc.line(margin, y, pageW - margin, y);
-  y += 8;
-
   for (let mapIdx = 0; mapIdx < mapsUnique.length; mapIdx++) {
     const { mapData, uniqueBlocks } = mapsUnique[mapIdx];
     ensureSpace(20);
@@ -6863,6 +6816,7 @@ const $reportSummary = document.getElementById('report-summary');
 const $reportBody = document.getElementById('report-body');
 const $reportCount = document.getElementById('report-count');
 const $reportClose = document.getElementById('report-close');
+const $reportExport = document.getElementById('report-export');
 
 function fmtReportDate(str) {
   return str && String(str).trim() ? formatRecordDate(String(str)) : '-';
@@ -6915,6 +6869,144 @@ function renderReportModal() {
   }).join('');
 }
 
+// ── REPORTE: EXPORTAR PDF ──
+function exportReportPDF() {
+  if (loadedMaps.length === 0) {
+    showWorkflowToast('No hay mapas cargados para exportar', '⚠️', 3000);
+    return;
+  }
+  openPdfPopupEarly();
+  try {
+    exportReportPDFCore();
+  } catch (err) {
+    console.warn('[MapView] Error exportando reporte PDF:', err);
+    closePdfPopup();
+    showWorkflowToast('No se pudo generar el PDF en este dispositivo', '⚠️', 3500);
+  }
+}
+
+function exportReportPDFCore() {
+  showWorkflowToast('Generando PDF del reporte...', '⏳', 3000);
+
+  const report = buildGeneralReport();
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF('p', 'mm', 'a4');
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  const margin = 14;
+  let y = margin;
+
+  function newPage() { doc.addPage(); y = margin; }
+  function ensureSpace(needed) { if (y + needed > pageH - margin) newPage(); }
+
+  doc.setFontSize(18);
+  doc.setFont(undefined, 'bold');
+  doc.text('MAPVIEW - Reporte General', margin, y);
+  y += 8;
+
+  doc.setFontSize(10);
+  doc.setFont(undefined, 'normal');
+  doc.text(`Fecha: ${new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' })}`, margin, y);
+  y += 5;
+  doc.text(`Total de territorios: ${report.total}`, margin, y);
+  y += 5;
+  doc.text(`Trabajados: ${report.worked.length} (${report.pctWorked}%)   -   Falta por trabajar: ${report.pending.length}`, margin, y);
+  y += 5;
+  doc.text(`Avance promedio: ${report.avg}%`, margin, y);
+  y += 7;
+
+  doc.setDrawColor(200);
+  doc.line(margin, y, pageW - margin, y);
+  y += 4;
+
+  doc.setFontSize(9);
+  doc.splitTextToSize('Completado = 100% (con fecha de finalizacion) - En curso = 50% (solo fecha de inicio) - Sin trabajar = 0% (sin registro). Trabajado = con fecha de inicio o finalizacion.', pageW - margin * 2).forEach(line => {
+    doc.text(line, margin, y);
+    y += 5;
+  });
+  y += 4;
+
+  const fmt = d => d && !isNaN(d.getTime()) ? d.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit' }) : '';
+
+  report.maps.forEach((m, mapIdx) => {
+    if (!m.territories.length) return;
+    ensureSpace(22);
+
+    doc.setFillColor(59, 130, 246);
+    doc.rect(margin, y - 4, pageW - margin * 2, 8, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFont(undefined, 'bold');
+    doc.setFontSize(10);
+    doc.text(`${mapIdx + 1}. ${m.name} - ${m.worked.length}/${m.territories.length} trabajados - avance ${m.avg}%`, margin + 3, y + 1);
+    doc.setTextColor(0, 0, 0);
+    y += 10;
+
+    const c = { num: 8, name: 48, status: 26, pct: 16, rest: 16, date1: 20, date2: 20, pub: 28 };
+    const xNum = margin;
+    const xName = xNum + c.num;
+    const xStatus = xName + c.name;
+    const xPct = xStatus + c.status;
+    const xRest = xPct + c.pct;
+    const xD1 = xRest + c.rest;
+    const xD2 = xD1 + c.date1;
+    const xPub = xD2 + c.date2;
+
+    ensureSpace(8);
+    doc.setFillColor(240, 240, 240);
+    doc.rect(margin, y - 3.5, pageW - margin * 2, 7, 'F');
+    doc.setFont(undefined, 'bold');
+    doc.setFontSize(8);
+    doc.text('#', xNum + 2, y + 1);
+    doc.text('Territorio', xName + 2, y + 1);
+    doc.text('Estado', xStatus + 2, y + 1);
+    doc.text('Avance', xPct + 2, y + 1);
+    doc.text('Falta', xRest + 2, y + 1);
+    doc.text('Inicio', xD1 + 2, y + 1);
+    doc.text('Fin', xD2 + 2, y + 1);
+    doc.text('Publicador', xPub + 2, y + 1);
+    y += 7;
+    doc.setFont(undefined, 'normal');
+
+    m.territories.forEach((t, i) => {
+      ensureSpace(7);
+      if (i % 2 === 0) {
+        doc.setFillColor(250, 250, 250);
+        doc.rect(margin, y - 3.5, pageW - margin * 2, 7, 'F');
+      }
+      doc.setFontSize(8);
+      doc.text(String(i + 1), xNum + 2, y + 1);
+      doc.text(t.name.substring(0, 30), xName + 2, y + 1);
+      doc.text(getProgressLabel(t.pct), xStatus + 2, y + 1);
+
+      const pc = t.pct >= 100 ? [16, 185, 129] : t.pct > 0 ? [245, 158, 11] : [239, 68, 68];
+      doc.setTextColor(pc[0], pc[1], pc[2]);
+      doc.text(`${t.pct}%`, xPct + 2, y + 1);
+      doc.text(`${100 - t.pct}%`, xRest + 2, y + 1);
+      doc.setTextColor(0, 0, 0);
+
+      const d1 = t.record && t.record.fecha_inicio ? new Date(t.record.fecha_inicio) : null;
+      const d2 = t.record && t.record.fecha_fin ? new Date(t.record.fecha_fin) : null;
+      doc.text(fmt(d1), xD1 + 2, y + 1);
+      doc.text(fmt(d2), xD2 + 2, y + 1);
+      doc.text(t.record && t.record.publicador ? String(t.record.publicador).substring(0, 15) : '', xPub + 2, y + 1);
+      y += 6;
+    });
+
+    y += 8;
+  });
+
+  const pageCount = doc.internal.getNumberOfPages();
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i);
+    doc.setFontSize(8);
+    doc.setTextColor(150);
+    doc.text(`MapView - Reporte - Pagina ${i} de ${pageCount}`, pageW / 2, pageH - 6, { align: 'center' });
+  }
+
+  const fileName = `Reporte_territorios_${new Date().toISOString().slice(0, 10)}.pdf`;
+  openPdfPreview(doc, fileName);
+}
+
 function openReportModal() {
   if (loadedMaps.length === 0) {
     showWorkflowToast('Carga un mapa primero', '🗺', 2600);
@@ -6940,11 +7032,12 @@ function closeReportModal() {
 }
 
 $reportClose.addEventListener('click', closeReportModal);
+$reportExport.addEventListener('click', exportReportPDF);
 $reportModal.addEventListener('click', (e) => {
   if (e.target === $reportModal) closeReportModal();
 });
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && $reportModal.classList.contains('active')) closeReportModal();
+  if (e.key === 'Escape' && $reportModal.classList.contains('active') && !$pdfModal.classList.contains('active')) closeReportModal();
 });
 
 window.addEventListener('online', () => {
