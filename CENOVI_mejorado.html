@@ -12,6 +12,10 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://script.google.com" crossorigin>
+<link rel="preconnect" href="https://script.googleusercontent.com" crossorigin>
+<link rel="preconnect" href="https://cdnjs.cloudflare.com">
+<link rel="preconnect" href="https://unpkg.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <style>
@@ -2998,7 +3002,7 @@ const $adminLogoutBtn = document.getElementById('admin-logout-btn');
 
 // Fetch password from Google Sheets
 function fetchAdminPassword() {
-  return fetch(`${GOOGLE_SHEETS_URL}?action=getPassword`)
+  return sheetFetch(`${GOOGLE_SHEETS_URL}?action=getPassword`, 12000)
     .then(r => r.json())
     .then(data => {
       const clave = data.clave || data.password;
@@ -3415,7 +3419,7 @@ function loadRecordsFromStorage() {
 }
 
 function fetchRecords(silent) {
-  return fetch(`${GOOGLE_SHEETS_URL}?action=getRecords`)
+  return sheetFetch(`${GOOGLE_SHEETS_URL}?action=getRecords`, 12000)
     .then(r => r.json())
     .then(data => {
       sheetRecords = Array.isArray(data) ? data : (data.records || []);
@@ -3693,7 +3697,7 @@ function deleteKmlData(fileName) {
 // ── KML SHARED STORAGE (Google Sheets) ──
 function fetchKmlsFromSheet() {
 
-  return fetch(`${GOOGLE_SHEETS_URL}?action=getKmls`)
+  return sheetFetch(`${GOOGLE_SHEETS_URL}?action=getKmls`, 12000)
     .then(r => {
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       return r.json();
@@ -6211,63 +6215,72 @@ function showWorkflowToast(text, icon, duration) {
 }
 
 // ── INTRO ──
+// La intro NO espera a Google Sheets: arranca de inmediato y la red se
+// consulta en segundo plano (con timeout) para no frenar la carga.
 const recordsReady = fetchRecords();
 loadKmlFromStorage();
 
+let appShown = false;
 function showApp() {
+  if (appShown) return;
+  appShown = true;
   $intro.style.display = 'none';
   document.getElementById('app').style.opacity = '1';
   map.invalidateSize();
 
   fetchAdminPassword();
 
-  recordsReady.then(() => {
-    if (allKmlData.length > 0) {
-      openMapSelector();
-    } else {
-      updateStats();
-    }
-  });
+  if (allKmlData.length > 0) {
+    openMapSelector();
+  } else {
+    updateStats();
+  }
+  recordsReady.then(() => updateStats());
 }
 
-fetchKmlsFromSheet().then(ok => {
-  if (ok) saveKmlToStorage();
-}).finally(() => {
-  const introTL = gsap.timeline({ defaults: { ease: 'power3.out' } });
+const introTL = gsap.timeline({ defaults: { ease: 'power3.out' } });
 
-  introTL
-    .to('.intro-icon', {
-      scale: 1,
-      opacity: 1,
-      duration: 0.35,
-      ease: 'back.out(1.7)'
-    })
-    .to('#intro h1', {
-      y: 0,
-      opacity: 1,
-      duration: 0.3
-    }, '-=0.15')
-    .to('#intro p', {
-      y: 0,
-      opacity: 1,
-      duration: 0.25
-    }, '-=0.15')
-    .to('.bar-track', {
-      opacity: 1,
-      duration: 0.2
-    }, '-=0.1')
-    .to('#bar-fill', {
-      width: '100%',
-      duration: 0.5,
-      ease: 'power2.inOut'
-    }, '-=0.1')
-    .to('#intro', {
-      opacity: 0,
-      scale: 0.96,
-      duration: 0.3,
-      ease: 'power2.in',
-      onComplete: showApp
-    }, '-=0.1');
+introTL
+  .to('.intro-icon', {
+    scale: 1,
+    opacity: 1,
+    duration: 0.35,
+    ease: 'back.out(1.7)'
+  })
+  .to('#intro h1', {
+    y: 0,
+    opacity: 1,
+    duration: 0.3
+  }, '-=0.15')
+  .to('#intro p', {
+    y: 0,
+    opacity: 1,
+    duration: 0.25
+  }, '-=0.15')
+  .to('.bar-track', {
+    opacity: 1,
+    duration: 0.2
+  }, '-=0.1')
+  .to('#bar-fill', {
+    width: '100%',
+    duration: 0.5,
+    ease: 'power2.inOut'
+  }, '-=0.1')
+  .to('#intro', {
+    opacity: 0,
+    scale: 0.96,
+    duration: 0.3,
+    ease: 'power2.in',
+    onComplete: showApp
+  }, '-=0.1');
+
+setTimeout(() => showApp(), 7000);
+
+fetchKmlsFromSheet().then(ok => {
+  if (!ok) return;
+  if ($intro.style.display === 'none' && ($mapSelector.classList.contains('active') || loadedMaps.length === 0)) {
+    openMapSelector();
+  }
 });
 
 function loadOSMTile(z, x, y) {
@@ -7112,16 +7125,9 @@ gsap.to('.status-dot', {
 </script>
 <script>
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('sw.js?v=9').then(reg => {
+  navigator.serviceWorker.register('sw.js?v=12').then(reg => {
     reg.update().catch(() => {});
   }).catch(() => {});
-  navigator.serviceWorker.ready.then(() => {
-    if ('caches' in window) {
-      caches.keys().then(names => {
-        names.filter(n => !n.startsWith('mapview-v8')).forEach(n => caches.delete(n));
-      });
-    }
-  });
 }
 </script>
 </body>
