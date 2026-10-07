@@ -361,6 +361,80 @@
     flex-shrink: 0;
   }
 
+  /* ── VISTA GENERAL ── */
+  .general-badge {
+    position: absolute;
+    top: 16px;
+    left: 16px;
+    z-index: 1000;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 0.5rem 1rem;
+    background: rgba(8, 16, 30, 0.88);
+    -webkit-backdrop-filter: var(--blur-std);
+    backdrop-filter: var(--blur-std);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
+    font-family: 'JetBrains Mono', monospace;
+    pointer-events: none;
+    text-align: center;
+  }
+  .gb-main { display: flex; align-items: baseline; gap: 6px; }
+  .gb-pct { font-size: 1.3rem; font-weight: 700; line-height: 1; color: #10b981; }
+  .gb-label { font-size: 0.55rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+  .gb-sub { font-size: 0.62rem; color: var(--text2); white-space: nowrap; }
+
+  .selector-general {
+    display: none;
+    align-items: center;
+    gap: 0.8rem;
+    width: 100%;
+    max-width: 700px;
+    margin: -0.5rem auto 1rem;
+    padding: 0.85rem 1rem;
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.12), rgba(13, 148, 136, 0.12));
+    border: 1px solid rgba(59, 130, 246, 0.35);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: border-color 0.3s var(--ease-apple), transform 0.3s var(--ease-apple);
+    text-align: left;
+    flex-shrink: 0;
+  }
+  .selector-general:hover { border-color: var(--accent); transform: translateY(-1px); }
+  .selector-general:active { transform: scale(0.99); transition-duration: 0.1s; }
+  .selector-general-icon { font-size: 1.5rem; flex-shrink: 0; }
+  .selector-general-info { flex: 1; min-width: 0; }
+  .selector-general-title { font-size: 0.85rem; font-weight: 700; color: var(--text); }
+  .selector-general-desc { font-size: 0.65rem; color: var(--muted); margin-top: 2px; }
+  .selector-general-pct {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: #10b981;
+    flex-shrink: 0;
+  }
+
+  .block-map-tag {
+    display: block;
+    font-size: 0.58rem;
+    font-style: normal;
+    font-weight: 500;
+    opacity: 0.8;
+    margin-top: 1px;
+  }
+
+  @media (max-width: 600px) {
+    .general-badge { top: 8px; left: 8px; padding: 0.4rem 0.7rem; }
+    .gb-pct { font-size: 1.05rem; }
+    .gb-sub { font-size: 0.56rem; }
+    .selector-general-pct { font-size: 1.1rem; }
+    .selector-general-desc { white-space: normal; }
+  }
+  [data-theme="light"] .general-badge { background: rgba(255, 255, 255, 0.93); }
+
   /* ── HUD ── */
   #hud-selection {
     position: absolute;
@@ -2576,7 +2650,15 @@
 <div id="map-selector">
   <div class="selector-header">
     <h2>Selecciona un Territorio</h2>
-    <p>Elige el mapa que deseas visualizar. Solo se carga uno a la vez para mejor rendimiento.</p>
+    <p>Elige el mapa que deseas visualizar, o abre la vista general con todos los territorios juntos.</p>
+  </div>
+  <div class="selector-general" id="selector-general">
+    <div class="selector-general-icon">🌐</div>
+    <div class="selector-general-info">
+      <div class="selector-general-title">Vista general</div>
+      <div class="selector-general-desc" id="selector-general-desc">Ver todos los mapas juntos con todos los polígonos</div>
+    </div>
+    <div class="selector-general-pct" id="selector-general-pct">0%</div>
   </div>
   <div class="selector-grid" id="selector-grid"></div>
   <div class="selector-footer">
@@ -2727,6 +2809,13 @@
         </div>
       </div>
       <div id="map"></div>
+      <div class="general-badge" id="general-badge">
+        <div class="gb-main">
+          <span class="gb-pct" id="gb-pct">0%</span>
+          <span class="gb-label">trabajado</span>
+        </div>
+        <div class="gb-sub" id="gb-sub"></div>
+      </div>
       <div class="workflow-toast" id="workflow-toast">
         <span class="workflow-toast-icon">👆</span>
         <span id="workflow-toast-text">Haz clic en un polígono del mapa o en la lista para ver sus datos</span>
@@ -2929,6 +3018,7 @@ let loadedMaps = [];
 let allKmlData = [];
 let nextMapId = 0;
 let activeMapFilter = null;
+let generalView = false;
 let selectedBlockKey = null;
 let mobileZoomOnly = false;
 let editingRecord = null;
@@ -2963,6 +3053,7 @@ const $mapSelector = document.getElementById('map-selector');
 const $selectorGrid = document.getElementById('selector-grid');
 const $btnCambiarMapa = document.getElementById('btn-cambiar-mapa');
 const $intro = document.getElementById('intro');
+document.getElementById('selector-general').addEventListener('click', loadGeneralView);
 const $mapEmptyState = document.getElementById('map-empty-state');
 const $fileUploadEmpty = document.getElementById('file-upload-empty');
 const $workflowToast = document.getElementById('workflow-toast');
@@ -3614,7 +3705,8 @@ function getProgressLabel(pct) {
 }
 
 function buildGeneralReport() {
-  const maps = loadedMaps.map(m => {
+  const source = allKmlData.length > 0 ? allKmlData : loadedMaps;
+  const maps = source.map(m => {
     const groups = new Map();
     m.blocks.forEach(b => {
       const k = normalizeTerritoryName(b.name);
@@ -3631,7 +3723,7 @@ function buildGeneralReport() {
     const worked = territories.filter(t => t.pct > 0);
     const pending = territories.filter(t => t.pct === 0);
     const avg = territories.length ? Math.round(territories.reduce((s, t) => s + t.pct, 0) / territories.length) : 0;
-    return { name: m.name, territories, worked, pending, avg };
+    return { name: m.name || (m.fileName || '').replace(/\.(kml|xml)$/i, ''), territories, worked, pending, avg };
   });
   const all = maps.flatMap(x => x.territories);
   const worked = all.filter(t => t.pct > 0);
@@ -4050,7 +4142,7 @@ function addMap(fileName, kmlBlocks) {
     }))
   };
   loadedMaps.push(mapData);
-  activeMapFilter = mapData.id;
+  if (!generalView) activeMapFilter = mapData.id;
   recordsReady.then(() => {
     renderAll();
   });
@@ -4073,7 +4165,7 @@ function toggleMapVisibility(mapId) {
 }
 
 function selectMapFilter(mapId) {
-  activeMapFilter = mapId;
+  activeMapFilter = (activeMapFilter === mapId && loadedMaps.length > 1) ? null : mapId;
   renderMapList();
   renderBlockList();
 }
@@ -4589,6 +4681,7 @@ function renderBlockList() {
 
   const fragment = document.createDocumentFragment();
   let idx = 0;
+  const showMapTags = loadedMaps.length > 1 && !activeMapFilter;
   sourceMaps.forEach(mapData => {
     mapData.blocks.forEach(block => {
       const key = { mapId: mapData.id, localId: block.localId };
@@ -4604,7 +4697,7 @@ function renderBlockList() {
       item.innerHTML = `
         <div class="block-color-pip" style="background:${visitInfo.colors.css}"></div>
         <span class="num">${String(idx+1).padStart(2,'0')}</span>
-        <span class="name">${block.name}</span>
+        <span class="name">${block.name}${showMapTags ? `<em class="block-map-tag" style="color:${mapData.color.solid}">${mapData.name}</em>` : ''}</span>
         <span class="arrow">›</span>
       `;
       item.addEventListener('click', () => {
@@ -4649,6 +4742,24 @@ function updateStats() {
   } else {
     $mapEmptyState.classList.remove('hidden');
   }
+
+  updateGeneralBadge();
+}
+
+function updateGeneralBadge() {
+  const badge = document.getElementById('general-badge');
+  if (!badge) return;
+  if (!generalView) {
+    badge.style.display = 'none';
+    return;
+  }
+  const report = buildGeneralReport();
+  const pct = report.pctWorked;
+  const pctEl = document.getElementById('gb-pct');
+  pctEl.textContent = pct + '%';
+  pctEl.style.color = pct >= 70 ? '#10b981' : pct >= 40 ? '#f59e0b' : '#ef4444';
+  document.getElementById('gb-sub').textContent = `${report.worked.length}/${report.total} territorios · Avance ${report.avg}%`;
+  badge.style.display = 'flex';
 }
 
 function fitAllBounds() {
@@ -5994,6 +6105,17 @@ function openMapSelector() {
   $selectorGrid.innerHTML = '';
   $mapEmptyState.classList.add('hidden');
 
+  const $sgGeneral = document.getElementById('selector-general');
+  if (allKmlData.length > 1) {
+    const r = buildGeneralReport();
+    document.getElementById('selector-general-pct').textContent = r.pctWorked + '%';
+    document.getElementById('selector-general-desc').textContent =
+      `${allKmlData.length} mapas · ${r.total} territorios · ${r.worked.length} trabajados · avance ${r.avg}%`;
+    $sgGeneral.style.display = 'flex';
+  } else {
+    $sgGeneral.style.display = 'none';
+  }
+
   allKmlData.forEach((kml, i) => {
     const color = MAP_COLORS[i % MAP_COLORS.length];
     const card = document.createElement('div');
@@ -6065,6 +6187,55 @@ function openMapSelector() {
   });
 }
 
+function loadGeneralView() {
+  gsap.to($mapSelector, {
+    opacity: 0,
+    duration: 0.3,
+    ease: 'power2.in',
+    onComplete: () => {
+      $mapSelector.classList.remove('active');
+      $mapSelector.style.opacity = '';
+    }
+  });
+
+  if (allKmlData.length === 0) {
+    showWorkflowToast('No hay mapas cargados', '⚠️', 3000);
+    return;
+  }
+
+  loadedMaps = [];
+  nextMapId = 0;
+  selectedBlockKey = null;
+  activeMapFilter = null;
+
+  allKmlData.forEach((kml, i) => {
+    loadedMaps.push({
+      id: nextMapId++,
+      name: kml.fileName.replace(/\.(kml|xml)$/i, ''),
+      fileName: kml.fileName,
+      color: MAP_COLORS[i % MAP_COLORS.length],
+      visible: true,
+      blocks: kml.blocks.map((b, j) => ({
+        localId: j,
+        name: b.name,
+        latlngs: parseCoordsToLeaflet(b.coords)
+      }))
+    });
+  });
+
+  generalView = true;
+  $btnCambiarMapa.style.display = 'flex';
+  document.getElementById('btn-export-pdf').style.display = 'flex';
+  document.getElementById('btn-reporte').style.display = 'flex';
+  updateGeneralBadge();
+  recordsReady.then(() => {
+    renderAll();
+  });
+  saveKmlToStorage();
+  const totalPolys = loadedMaps.reduce((s, m) => s + m.blocks.length, 0);
+  showWorkflowToast(`Vista general: ${loadedMaps.length} mapas y ${totalPolys} polígonos`, '🌐', 4000);
+}
+
 function loadSelectedMap(index) {
   gsap.to($mapSelector, {
     opacity: 0,
@@ -6081,6 +6252,7 @@ function loadSelectedMap(index) {
   nextMapId = 0;
   selectedBlockKey = null;
   activeMapFilter = null;
+  generalView = false;
 
   const color = MAP_COLORS[0];
   const mapData = {
