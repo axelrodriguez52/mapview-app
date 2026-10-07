@@ -364,58 +364,163 @@
   /* ── VISTA GENERAL ── */
   .general-badge {
     position: absolute;
-    top: 16px;
-    left: 16px;
+    top: 14px;
+    left: 50%;
+    transform: translateX(-50%);
     z-index: 1000;
     display: none;
     flex-direction: column;
     align-items: center;
-    gap: 2px;
-    padding: 0.5rem 1rem;
-    background: rgba(8, 16, 30, 0.88);
+    gap: 3px;
+    min-width: 250px;
+    padding: 0.6rem 1.3rem 0.7rem;
+    background: rgba(8, 16, 30, 0.92);
     -webkit-backdrop-filter: var(--blur-std);
     backdrop-filter: var(--blur-std);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
+    border: 1px solid rgba(96, 165, 250, 0.45);
+    border-radius: 14px;
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45), inset 0 0 0 1px rgba(59, 130, 246, 0.12);
     font-family: 'JetBrains Mono', monospace;
     pointer-events: none;
     text-align: center;
+    animation: gb-in 0.45s var(--ease-apple);
   }
-  .gb-main { display: flex; align-items: baseline; gap: 6px; }
-  .gb-pct { font-size: 1.3rem; font-weight: 700; line-height: 1; color: #10b981; }
-  .gb-label { font-size: 0.55rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
-  .gb-sub { font-size: 0.62rem; color: var(--text2); white-space: nowrap; }
+  @keyframes gb-in {
+    from { opacity: 0; transform: translateX(-50%) translateY(-10px) scale(0.95); }
+    to { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+  }
+  .gb-eyebrow {
+    font-size: 0.53rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: #93bbfd;
+  }
+  .gb-main { display: flex; align-items: baseline; gap: 8px; }
+  .gb-pct { font-size: 1.75rem; font-weight: 700; line-height: 1; color: #10b981; }
+  .gb-label { font-size: 0.6rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; }
+  .gb-sub { font-size: 0.63rem; color: var(--text2); white-space: nowrap; }
+  .gb-bar {
+    width: 100%;
+    height: 4px;
+    margin-top: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .gb-bar i {
+    display: block;
+    height: 100%;
+    width: 0;
+    background: linear-gradient(90deg, #3b82f6, #10b981);
+    border-radius: 2px;
+    transition: width 0.6s var(--ease-apple);
+  }
 
   .selector-general {
     display: none;
     align-items: center;
-    gap: 0.8rem;
+    gap: 0.9rem;
     width: 100%;
     max-width: 700px;
     margin: -0.5rem auto 1rem;
-    padding: 0.85rem 1rem;
-    background: linear-gradient(135deg, rgba(59, 130, 246, 0.12), rgba(13, 148, 136, 0.12));
-    border: 1px solid rgba(59, 130, 246, 0.35);
-    border-radius: 12px;
+    padding: 1rem 1.1rem;
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.16), rgba(13, 148, 136, 0.14) 55%, rgba(59, 130, 246, 0.10));
+    border: 1px solid rgba(96, 165, 250, 0.4);
+    border-radius: 14px;
     cursor: pointer;
-    transition: border-color 0.3s var(--ease-apple), transform 0.3s var(--ease-apple);
+    transition: border-color 0.3s var(--ease-apple), transform 0.3s var(--ease-apple), box-shadow 0.3s var(--ease-apple);
     text-align: left;
     flex-shrink: 0;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 4px 20px rgba(59, 130, 246, 0.12);
   }
-  .selector-general:hover { border-color: var(--accent); transform: translateY(-1px); }
+  .selector-general::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -60%;
+    width: 45%;
+    height: 100%;
+    background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.12), transparent);
+    transform: skewX(-18deg);
+    transition: left 0.6s ease;
+    pointer-events: none;
+  }
+  .selector-general:hover::before { left: 130%; }
+  .selector-general:hover {
+    border-color: var(--accent);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 28px rgba(59, 130, 246, 0.22);
+  }
   .selector-general:active { transform: scale(0.99); transition-duration: 0.1s; }
-  .selector-general-icon { font-size: 1.5rem; flex-shrink: 0; }
+  .selector-general-icon {
+    width: 46px;
+    height: 46px;
+    border-radius: 13px;
+    background: linear-gradient(135deg, #1d4ed8, #0d9488);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.4rem;
+    flex-shrink: 0;
+    box-shadow: 0 4px 14px rgba(29, 78, 216, 0.4);
+  }
   .selector-general-info { flex: 1; min-width: 0; }
-  .selector-general-title { font-size: 0.85rem; font-weight: 700; color: var(--text); }
-  .selector-general-desc { font-size: 0.65rem; color: var(--muted); margin-top: 2px; }
+  .selector-general-title {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+  .selector-general-chip {
+    font-size: 0.53rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #93bbfd;
+    background: rgba(59, 130, 246, 0.15);
+    border: 1px solid rgba(59, 130, 246, 0.35);
+    padding: 1px 7px;
+    border-radius: 999px;
+  }
+  .selector-general-desc { font-size: 0.65rem; color: var(--muted); margin-top: 3px; }
+  .selector-general-bar {
+    width: 100%;
+    height: 5px;
+    margin-top: 8px;
+    background: var(--border);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .selector-general-bar i {
+    display: block;
+    height: 100%;
+    width: 0;
+    background: linear-gradient(90deg, #3b82f6, #10b981);
+    border-radius: 3px;
+    transition: width 0.6s var(--ease-apple);
+  }
+  .selector-general-right { display: flex; align-items: center; gap: 0.45rem; flex-shrink: 0; }
   .selector-general-pct {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 1.3rem;
+    font-size: 1.5rem;
     font-weight: 700;
     color: #10b981;
+    line-height: 1;
+  }
+  .selector-general-arrow {
+    width: 18px;
+    height: 18px;
+    color: var(--muted);
+    transition: transform 0.3s var(--ease-apple), color 0.3s var(--ease-apple);
     flex-shrink: 0;
   }
+  .selector-general:hover .selector-general-arrow { transform: translateX(3px); color: var(--accent); }
 
   .block-map-tag {
     display: block;
@@ -426,14 +531,21 @@
     margin-top: 1px;
   }
 
+  /* El badge ocupa el centro superior: el HUD del territorio seleccionado baja para no taparlo */
+  #map-container.general-active #hud-selection { top: 112px; }
+
   @media (max-width: 600px) {
-    .general-badge { top: 8px; left: 8px; padding: 0.4rem 0.7rem; }
-    .gb-pct { font-size: 1.05rem; }
+    .general-badge { top: 8px; min-width: 200px; padding: 0.45rem 0.9rem 0.55rem; }
+    .gb-pct { font-size: 1.35rem; }
     .gb-sub { font-size: 0.56rem; }
-    .selector-general-pct { font-size: 1.1rem; }
+    .gb-eyebrow { font-size: 0.48rem; }
+    .selector-general-pct { font-size: 1.2rem; }
     .selector-general-desc { white-space: normal; }
+    .selector-general-icon { width: 40px; height: 40px; font-size: 1.2rem; border-radius: 11px; }
+    #map-container.general-active #hud-selection { top: 88px; }
   }
-  [data-theme="light"] .general-badge { background: rgba(255, 255, 255, 0.93); }
+  [data-theme="light"] .general-badge { background: rgba(255, 255, 255, 0.94); }
+  [data-theme="light"] .gb-eyebrow { color: #1d4ed8; }
 
   /* ── HUD ── */
   #hud-selection {
@@ -2655,10 +2767,14 @@
   <div class="selector-general" id="selector-general">
     <div class="selector-general-icon">🌐</div>
     <div class="selector-general-info">
-      <div class="selector-general-title">Vista general</div>
+      <div class="selector-general-title">Vista general <span class="selector-general-chip">Todos los mapas</span></div>
       <div class="selector-general-desc" id="selector-general-desc">Ver todos los mapas juntos con todos los polígonos</div>
+      <div class="selector-general-bar"><i id="selector-general-bar-fill"></i></div>
     </div>
-    <div class="selector-general-pct" id="selector-general-pct">0%</div>
+    <div class="selector-general-right">
+      <span class="selector-general-pct" id="selector-general-pct">0%</span>
+      <svg class="selector-general-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+    </div>
   </div>
   <div class="selector-grid" id="selector-grid"></div>
   <div class="selector-footer">
@@ -2810,11 +2926,13 @@
       </div>
       <div id="map"></div>
       <div class="general-badge" id="general-badge">
+        <div class="gb-eyebrow">🌐 Vista general</div>
         <div class="gb-main">
           <span class="gb-pct" id="gb-pct">0%</span>
           <span class="gb-label">trabajado</span>
         </div>
         <div class="gb-sub" id="gb-sub"></div>
+        <div class="gb-bar"><i id="gb-bar-fill"></i></div>
       </div>
       <div class="workflow-toast" id="workflow-toast">
         <span class="workflow-toast-icon">👆</span>
@@ -4758,6 +4876,7 @@ function updateGeneralBadge() {
   const pctEl = document.getElementById('gb-pct');
   pctEl.textContent = pct + '%';
   pctEl.style.color = pct >= 70 ? '#10b981' : pct >= 40 ? '#f59e0b' : '#ef4444';
+  document.getElementById('gb-bar-fill').style.width = pct + '%';
   document.getElementById('gb-sub').textContent = `${report.worked.length}/${report.total} territorios · Avance ${report.avg}%`;
   badge.style.display = 'flex';
 }
@@ -6108,7 +6227,11 @@ function openMapSelector() {
   const $sgGeneral = document.getElementById('selector-general');
   if (allKmlData.length > 1) {
     const r = buildGeneralReport();
-    document.getElementById('selector-general-pct').textContent = r.pctWorked + '%';
+    const pct = r.pctWorked;
+    const pctEl = document.getElementById('selector-general-pct');
+    pctEl.textContent = pct + '%';
+    pctEl.style.color = pct >= 70 ? '#10b981' : pct >= 40 ? '#f59e0b' : '#ef4444';
+    document.getElementById('selector-general-bar-fill').style.width = pct + '%';
     document.getElementById('selector-general-desc').textContent =
       `${allKmlData.length} mapas · ${r.total} territorios · ${r.worked.length} trabajados · avance ${r.avg}%`;
     $sgGeneral.style.display = 'flex';
@@ -6224,6 +6347,7 @@ function loadGeneralView() {
   });
 
   generalView = true;
+  document.getElementById('map-container').classList.add('general-active');
   $btnCambiarMapa.style.display = 'flex';
   document.getElementById('btn-export-pdf').style.display = 'flex';
   document.getElementById('btn-reporte').style.display = 'flex';
@@ -6253,6 +6377,7 @@ function loadSelectedMap(index) {
   selectedBlockKey = null;
   activeMapFilter = null;
   generalView = false;
+  document.getElementById('map-container').classList.remove('general-active');
 
   const color = MAP_COLORS[0];
   const mapData = {
