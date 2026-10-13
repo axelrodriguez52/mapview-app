@@ -3637,6 +3637,11 @@ function fetchRecords(silent) {
       recordsLoaded = true;
       saveRecordsToStorage();
 
+      // Siempre que llegan registros se recalculan los % que dependen de
+      // ellos (badge, tarjeta "Vista general", reporte y lista de registros),
+      // aunque la carga inicial ocurra en segundo plano.
+      refreshRecordsDependentUI();
+
       if (silent) return;
 
       if (loadedMaps.length > 0) {
@@ -3653,9 +3658,20 @@ function fetchRecords(silent) {
       console.warn('[MapView] Error al cargar registros de Google Sheets:', err);
       if (!recordsLoaded) {
         loadRecordsFromStorage();
+        refreshRecordsDependentUI();
       }
       recordsLoaded = true;
     });
+}
+
+function refreshRecordsDependentUI() {
+  updateStats();
+  updateSelectorGeneralCard();
+  const rm = document.getElementById('report-modal');
+  if (rm && rm.classList.contains('active')) renderReportModal();
+  if ($recordsModal && $recordsModal.classList.contains('active')) {
+    renderRecordsList($recordsSearch.value.trim().toLowerCase());
+  }
 }
 
 function buildRecordsMap() {
@@ -4882,6 +4898,24 @@ function updateGeneralBadge() {
   badge.style.display = 'flex';
 }
 
+function updateSelectorGeneralCard() {
+  const $sgGeneral = document.getElementById('selector-general');
+  if (!$sgGeneral) return;
+  if (allKmlData.length > 1) {
+    const r = buildGeneralReport();
+    const pct = r.pctWorked;
+    const pctEl = document.getElementById('selector-general-pct');
+    pctEl.textContent = pct + '%';
+    pctEl.style.color = pct >= 70 ? '#10b981' : pct >= 40 ? '#f59e0b' : '#ef4444';
+    document.getElementById('selector-general-bar-fill').style.width = pct + '%';
+    document.getElementById('selector-general-desc').textContent =
+      `${allKmlData.length} mapas · ${r.total} territorios · ${r.worked.length} trabajados · avance ${r.avg}%`;
+    $sgGeneral.style.display = 'flex';
+  } else {
+    $sgGeneral.style.display = 'none';
+  }
+}
+
 function fitAllBounds() {
   const bounds = L.latLngBounds();
   loadedMaps.forEach(m => {
@@ -5585,9 +5619,24 @@ function completeRecord() {
     if (selectedBlockKey) renderDetailRecords();
   }
 
+  // Aplicación local inmediata: el cierre se refleja al instante en la
+  // interfaz (polígono, stats y %) sin esperar los 2 round-trips a Sheets.
+  const prevRecords = sheetRecords.slice();
+  applyLocalCompletion();
+  statusEl.textContent = 'Guardando en Google Sheets...';
+
+  function rollbackLocalCompletion() {
+    sheetRecords = prevRecords.slice();
+    buildRecordsMap();
+    saveRecordsToStorage();
+    refreshBlockVisual(found.mapData.id, found.block.localId);
+    if (selectedBlockKey) renderDetailRecords();
+  }
+
   attemptDelete(2)
     .then(deleted => {
       if (!deleted) {
+        rollbackLocalCompletion();
         if (completionRecord === rec) {
           statusEl.className = 'save-status error';
           statusEl.textContent = 'No se pudo completar el registro. Verifica tu conexión.';
@@ -5602,7 +5651,6 @@ function completeRecord() {
         })
         .catch(() => {
           queueRecord(addPayload);
-          applyLocalCompletion();
           return 'queued';
         });
     })
@@ -5618,7 +5666,6 @@ function completeRecord() {
         showWorkflowToast('Guardado offline — se completará al conectar', '📴', 3500);
         updatePendingBadge();
       } else {
-        applyLocalCompletion();
         if (stillActive) {
           clearCompletionState();
           statusEl.className = 'save-status success';
@@ -6225,20 +6272,7 @@ function openMapSelector() {
   $selectorGrid.innerHTML = '';
   $mapEmptyState.classList.add('hidden');
 
-  const $sgGeneral = document.getElementById('selector-general');
-  if (allKmlData.length > 1) {
-    const r = buildGeneralReport();
-    const pct = r.pctWorked;
-    const pctEl = document.getElementById('selector-general-pct');
-    pctEl.textContent = pct + '%';
-    pctEl.style.color = pct >= 70 ? '#10b981' : pct >= 40 ? '#f59e0b' : '#ef4444';
-    document.getElementById('selector-general-bar-fill').style.width = pct + '%';
-    document.getElementById('selector-general-desc').textContent =
-      `${allKmlData.length} mapas · ${r.total} territorios · ${r.worked.length} trabajados · avance ${r.avg}%`;
-    $sgGeneral.style.display = 'flex';
-  } else {
-    $sgGeneral.style.display = 'none';
-  }
+  updateSelectorGeneralCard();
 
   allKmlData.forEach((kml, i) => {
     const color = MAP_COLORS[i % MAP_COLORS.length];
@@ -7388,7 +7422,17 @@ function pingSheetsBackend() {
 }
 pingSheetsBackend();
 setInterval(pingSheetsBackend, 4 * 60 * 1000);
-document.addEventListener('visibilitychange', () => { if (!document.hidden) pingSheetsBackend(); });
+let lastRecordsRefresh = 0;
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) return;
+  pingSheetsBackend();
+  // Al volver a la pestaña se refrescan registros y % (máx. 1 vez / 15 s)
+  const now = Date.now();
+  if (now - lastRecordsRefresh > 15000) {
+    lastRecordsRefresh = now;
+    fetchRecords();
+  }
+});
 
 // ── GSAP BUTTON PRESS FEEDBACK ──
 document.addEventListener('mousedown', (e) => {
