@@ -138,7 +138,7 @@
   color: transparent;
 }
 @keyframes splash-letter { to { opacity: 1; transform: translateY(0); } }
-.splash-tagline { margin: 0 0 34px; font-size: .7rem; letter-spacing: .22em; text-transform: uppercase; color: #64748b; opacity: 0; animation: splash-fade .7s ease .8s forwards; }
+.splash-tagline { margin: 0 0 34px; max-width: min(88vw, 460px); font-size: .7rem; letter-spacing: .22em; line-height: 1.7; text-align: center; text-transform: uppercase; color: #64748b; opacity: 0; animation: splash-fade .7s ease .8s forwards; }
 @keyframes splash-fade { to { opacity: 1; } }
 
 .splash-progress { width: min(248px, 64vw); opacity: 0; animation: splash-fade .6s ease .95s forwards; }
