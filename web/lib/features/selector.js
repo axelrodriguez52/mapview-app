@@ -16,12 +16,11 @@ export function openMapSelector() {
   $selectorGrid.innerHTML = '';
   $mapEmptyState.classList.add('hidden');
 
-  updateSelectorGeneralCard();
-
   state.allKmlData.forEach((kml, i) => {
     const color = MAP_COLORS[i % MAP_COLORS.length];
     const card = document.createElement('div');
     card.className = 'selector-card';
+    card.dataset.mapIndex = i;
     card.style.setProperty('--card-color', color.solid);
     card.style.animationDelay = `${0.1 + i * 0.08}s`;
     card.innerHTML = `
@@ -36,7 +35,11 @@ export function openMapSelector() {
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
         </button>
       </div>
-      <div class="selector-card-count">${kml.blocks.length} polígonos</div>
+      <div class="selector-card-stats">
+        <span class="selector-card-count">${kml.blocks.length} polígonos</span>
+        <span class="selector-card-pct" data-card-pct title="Avance del territorio">0%</span>
+      </div>
+      <div class="selector-card-bar" aria-hidden="true"><i data-card-bar></i></div>
       <button class="selector-card-btn">Abrir este mapa</button>
     `;
     card.addEventListener('click', () => loadSelectedMap(i));
@@ -61,6 +64,8 @@ export function openMapSelector() {
     });
     $selectorGrid.appendChild(card);
   });
+
+  updateSelectorGeneralCard();
 
   $mapSelector.classList.add('active');
 

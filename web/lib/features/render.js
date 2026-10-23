@@ -525,21 +525,43 @@ export function updateGeneralBadge() {
 }
 
 export function updateSelectorGeneralCard() {
+  const r = buildGeneralReport();
   const $sgGeneral = document.getElementById('selector-general');
-  if (!$sgGeneral) return;
-  if (state.allKmlData.length > 1) {
-    const r = buildGeneralReport();
-    const pct = r.pctWorked;
-    const pctEl = document.getElementById('selector-general-pct');
-    pctEl.textContent = pct + '%';
-    pctEl.style.color = pct >= 70 ? '#10b981' : pct >= 40 ? '#f59e0b' : '#ef4444';
-    document.getElementById('selector-general-bar-fill').style.width = pct + '%';
-    document.getElementById('selector-general-desc').textContent =
-      `${state.allKmlData.length} mapas · ${r.total} territorios · ${r.worked.length} trabajados · avance ${r.avg}%`;
-    $sgGeneral.style.display = 'flex';
-  } else {
-    $sgGeneral.style.display = 'none';
+  if ($sgGeneral) {
+    if (state.allKmlData.length > 1) {
+      const pct = r.pctWorked;
+      const pctEl = document.getElementById('selector-general-pct');
+      pctEl.textContent = pct + '%';
+      pctEl.style.color = pct >= 70 ? '#10b981' : pct >= 40 ? '#f59e0b' : '#ef4444';
+      document.getElementById('selector-general-bar-fill').style.width = pct + '%';
+      document.getElementById('selector-general-desc').textContent =
+        `${state.allKmlData.length} mapas · ${r.total} territorios · ${r.worked.length} trabajados · avance ${r.avg}%`;
+      $sgGeneral.style.display = 'flex';
+    } else {
+      $sgGeneral.style.display = 'none';
+    }
   }
+  updateSelectorCardProgress(r);
+}
+
+/** Pinta el avance promedio de cada mapa en su tarjeta del selector. */
+export function updateSelectorCardProgress(report = buildGeneralReport()) {
+  document.querySelectorAll('.selector-card[data-map-index]').forEach(card => {
+    const map = report.maps[Number(card.dataset.mapIndex)];
+    const pct = map ? map.avg : 0;
+    const color = pct >= 70 ? '#10b981' : pct >= 40 ? '#f59e0b' : '#ef4444';
+    const pctEl = card.querySelector('[data-card-pct]');
+    const barEl = card.querySelector('[data-card-bar]');
+    if (pctEl) {
+      pctEl.textContent = pct + '%';
+      pctEl.style.color = color;
+      pctEl.setAttribute('aria-label', `Avance ${pct}%`);
+    }
+    if (barEl) {
+      barEl.style.width = pct + '%';
+      barEl.style.background = color;
+    }
+  });
 }
 
 export function fitAllBounds() {
