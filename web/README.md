@@ -55,6 +55,8 @@ publica en la raíz (no hace falta cambiar la configuración de Pages).
 
 - El motor (`lib/app.js` y sus módulos) se importa dinámicamente en el cliente para
   que Leaflet nunca se ejecute durante el render en servidor.
+- El build apunta a Safari/iOS 16 (`browserslist` en `web/package.json`) para que
+  Next.js transpile los class static blocks que iPadOS 16.0–16.3 no soporta.
 - `basePath` está fijado en `/mapview-app` (`web/next.config.mjs`). Si cambia la URL
   del sitio, hay que actualizar también el `manifest` en `web/app/layout.jsx`.
 - `CENOVI_mejorado.html` se conserva como versión anterior de un solo archivo.

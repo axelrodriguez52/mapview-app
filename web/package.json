@@ -15,5 +15,9 @@
     "leaflet": "1.9.4",
     "gsap": "3.12.5",
     "jspdf": "2.5.1"
-  }
+  },
+  "browserslist": [
+    "Safari >= 16",
+    "iOS >= 16"
+  ]
 }
